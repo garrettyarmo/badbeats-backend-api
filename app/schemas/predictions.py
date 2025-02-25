@@ -41,7 +41,7 @@ class PredictionBase(BaseModel):
     """
     Shared fields between request and response models.
     """
-    agent_id: int = Field(..., description="Identifies the model/agent making the prediction.")
+    agent_id: str = Field(..., description="Identifies the model/agent making the prediction.")
     game_id: int = Field(..., description="Unique identifier for the game.")
     pick: str = Field(..., description="Team and spread, e.g. 'Lakers -4'.")
     logic: str = Field(..., description="A paragraph explaining the reasoning for this pick.")
