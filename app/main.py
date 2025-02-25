@@ -11,6 +11,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Import the Health Router
+from api.health import router as health_router
+
 # Initialize FastAPI app with metadata
 app = FastAPI(
     title="BadBeats API",
@@ -32,7 +35,7 @@ app.add_middleware(
 async def root():
     """
     Root endpoint providing a simple health check and API information.
-    
+
     Returns:
         dict: Basic API information including status and version.
     """
@@ -42,8 +45,8 @@ async def root():
         "version": "0.1.0"
     }
 
-# Import and include API routers here
-# Example: app.include_router(some_router, prefix="/api/v1")
+# Include the health router under prefix /api/v1
+app.include_router(health_router, prefix="/api/v1")
 
 # Add favicon endpoint to silence 404s
 @app.get('/favicon.ico')
