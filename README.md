@@ -54,26 +54,26 @@ A sophisticated backend API that generates AI-driven sports betting picks for th
 
 1. Clone the repository:
 
-git clone https://github.com/garrettyarmo/badbeats-backend-api.git
-cd badbeats-backend-api
+- git clone https://github.com/garrettyarmo/badbeats-backend-api.git
+- cd badbeats-backend-api
 
 2. Create and activate a virtual environment:
 
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+- python -m venv venv
+- source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 3. Install dependencies:
 
-pip install -r requirements.txt
+- pip install -r requirements.txt
 
 4. Set up environment variables:
 
-cp .env.example .env
-Edit .env with your configuration
+- cp .env.example .env
+- Edit .env with your configuration
 
 5. Run the application:
 
-python main.py
+- python main.py
 
 ## API Documentation
 
@@ -85,16 +85,13 @@ Once the server is running, access the interactive API documentation at:
 
 ### Testing
 
-Run tests with pytest:
-
-pytest app/tests
+- Run tests with pytest: `pytest app/tests`
 
 ### Code Style
 
-This project follows PEP 8 style guidelines. Use tools like flake8 and black for linting and formatting:
-
-flake8 app
-black app
+- This project follows PEP 8 style guidelines. Use tools like flake8 and black for linting and formatting:
+- `flake8 app`
+- `black app`
 
 ## License
 
