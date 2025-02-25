@@ -1,0 +1,104 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# VS Code settings
+.vscode/
+*.code-workspace
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Supabase local dev
+.supabase/
+
+# Logs and database files
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Node.js dependencies (if applicable)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS / Linux system files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+*.swp
+*.swo
+*.swn
+
+# IDE-specific files
+.idea/
+*.iml
+
+# Testing
+.coverage
+.tox/
+noxfile_config.json
+.pytest_cache/
+
+# Linting
+.mypy_cache/
+pylint.log
+ruff_cache/
+
+# Cache
+__pypackages__/
+pip-wheel-metadata/
+pip-log.txt
+*.pyc
+*.pyo
+*.pyd
+
+# Git metadata
+.git/
+
+# Security
+.env.local
+.env.production
+.env.development
+.env.test
+*.secrets
+
