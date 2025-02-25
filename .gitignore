@@ -96,6 +96,7 @@ pip-log.txt
 .git/
 
 # Security
+.env
 .env.local
 .env.production
 .env.development
