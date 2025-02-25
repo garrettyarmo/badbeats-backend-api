@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import the Health Router
-from api.health import router as health_router
+from .api.health import router as health_router
 
 # Initialize FastAPI app with metadata
 app = FastAPI(
