@@ -11,8 +11,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import the Health Router
+# Import the Health Router and Predictions Router
 from .api.health import router as health_router
+from .api.predictions import router as predictions_router
 
 # Initialize FastAPI app with metadata
 app = FastAPI(
@@ -47,6 +48,10 @@ async def root():
 
 # Include the health router under prefix /api/v1
 app.include_router(health_router, prefix="/api/v1")
+
+# Include the predictions router under prefix /api/v1
+app.include_router(predictions_router, prefix="/api/v1")
+
 
 # Add favicon endpoint to silence 404s
 @app.get('/favicon.ico')
