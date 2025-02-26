@@ -69,9 +69,13 @@ def ingest_nba_data(self):
         dict: Summary of ingested data
     """
     try:
-        # Convert to async
-        loop = asyncio.get_event_loop()
+        # Create a new event loop for asyncio operations
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Fetch upcoming games
         upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=7))
+        loop.close()
         
         logger.info(f"Ingested {len(upcoming_games)} upcoming games")
         return {
@@ -102,9 +106,13 @@ def schedule_game_predictions(self):
         dict: Summary of scheduled predictions
     """
     try:
-        # Convert to async
-        loop = asyncio.get_event_loop()
+        # Create a new event loop for asyncio operations
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Fetch upcoming games
         upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=7))
+        loop.close()
         
         scheduled_count = 0
         for game in upcoming_games:
@@ -186,8 +194,11 @@ def generate_prediction(self, game_id: int):
         dict: Summary of the generated prediction
     """
     try:
-        # Convert to async and gather game data
-        loop = asyncio.get_event_loop()
+        # Create a new event loop for asyncio operations
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Prepare game data for prediction
         game_data = loop.run_until_complete(_prepare_game_data(game_id))
         
         if not game_data:
@@ -214,6 +225,7 @@ def generate_prediction(self, game_id: int):
         
         # Generate prediction (async)
         prediction_result = loop.run_until_complete(prediction_model.predict(prediction_input))
+        loop.close()
         
         # Save the prediction to the database
         prediction_create = PredictionCreate(

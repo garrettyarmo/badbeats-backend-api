@@ -37,8 +37,8 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.output_parsers import StructuredOutputParser, PydanticOutputParser
+from pydantic import BaseModel, Field
+from langchain_core.output_parsers import JsonOutputParser
 from langchain.chains import LLMChain
 from langchain.memory import ConversationBufferMemory
 
@@ -177,8 +177,8 @@ class LangChainPredictionModel(BasePredictionModel):
         This parser ensures that the LLM's textual output can be
         converted into a structured format matching our prediction schema.
         """
-        # Create a Pydantic output parser
-        self._parser = PydanticOutputParser(pydantic_object=PredictionResponseSchema)
+        # Create a JSON output parser for our prediction schema
+        self._parser = JsonOutputParser(pydantic_object=PredictionResponseSchema)
         
         # Get the format instructions for the LLM
         self._format_instructions = self._parser.get_format_instructions()
@@ -314,7 +314,10 @@ Additional Context:
 - Player injuries can significantly affect team capabilities.
 
 Based on all available information, predict which team will cover the spread.
-{self._format_instructions}
+Return your prediction as a JSON object with the following fields:
+- pick: The team name and spread (e.g., "Lakers -4")
+- logic: A paragraph explaining your reasoning
+- confidence: A number between 0 and 1 representing your confidence level
 """
         return prompt
     
@@ -408,16 +411,42 @@ Based on all available information, predict which team will cover the spread.
             PredictionError: If parsing fails
         """
         try:
-            # Parse the response text using the output parser
-            parsed_output = self._parser.parse(llm_response)
+            # First try to parse the response as JSON directly
+            try:
+                # Find JSON part in the response
+                json_start = llm_response.find('{')
+                json_end = llm_response.rfind('}') + 1
+                
+                if json_start >= 0 and json_end > json_start:
+                    json_str = llm_response[json_start:json_end]
+                    parsed_output = json.loads(json_str)
+                else:
+                    # If no JSON brackets found, try to parse the whole response
+                    parsed_output = json.loads(llm_response)
+            except json.JSONDecodeError:
+                # If direct JSON parsing fails, use regex to extract key fields
+                import re
+                
+                pick_match = re.search(r'"pick"\s*:\s*"([^"]+)"', llm_response)
+                logic_match = re.search(r'"logic"\s*:\s*"([^"]+)"', llm_response)
+                confidence_match = re.search(r'"confidence"\s*:\s*([\d.]+)', llm_response)
+                
+                if pick_match and logic_match and confidence_match:
+                    parsed_output = {
+                        "pick": pick_match.group(1),
+                        "logic": logic_match.group(1),
+                        "confidence": float(confidence_match.group(1))
+                    }
+                else:
+                    raise ValueError("Could not extract prediction fields from response")
             
             # Extract and validate the required fields
-            pick = parsed_output.pick
-            logic = parsed_output.logic
+            pick = parsed_output.get("pick", "")
+            logic = parsed_output.get("logic", "")
             
             # Handle confidence - ensure it's a float between 0 and 1
             try:
-                confidence_raw = float(parsed_output.confidence)
+                confidence_raw = float(parsed_output.get("confidence", 0.5))
                 confidence = max(0.0, min(1.0, confidence_raw))
             except (ValueError, TypeError):
                 logger.warning("Could not parse confidence score, using default 0.5")

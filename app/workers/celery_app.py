@@ -11,8 +11,8 @@ backend, and task configuration.
 
 @notes:
 - The Celery app is configured using settings from the central config module
-- Task routes can be defined to organize tasks into different queues
-- Beat schedule can be configured for recurring tasks
+- Task routes are defined to organize tasks into different queues
+- Beat schedule is configured for recurring tasks
 - Redis is used as both the broker and result backend
 """
 
@@ -42,11 +42,12 @@ celery_app.conf.update(
     task_track_started=True,
 )
 
-# Define task routes (optional)
+# Define task routes for better organization
 celery_app.conf.task_routes = {
-    "app.workers.tasks.generate_predictions": {"queue": "predictions"},
+    "app.workers.tasks.generate_prediction": {"queue": "predictions"},
     "app.workers.tasks.update_game_results": {"queue": "results"},
     "app.workers.tasks.ingest_nba_data": {"queue": "data_ingestion"},
+    "app.workers.tasks.schedule_game_predictions": {"queue": "schedulers"},
 }
 
 # Configure Celery Beat scheduler for periodic tasks

@@ -9,6 +9,7 @@ This package handles all background and scheduled tasks using Celery, including:
 
 Key components:
 - celery_app: Initializes and configures the Celery application
+- celery_config: Defines Celery-specific configuration settings
 - tasks: Defines the Celery tasks for prediction scheduling and data ingestion
 - worker: Entry point for starting Celery workers
 """
