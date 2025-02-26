@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default="your_secret_key_here")
     
     # Database
+    DATABASE_URL: Optional[str] = Field(default=None)  # Added DATABASE_URL field
     SUPABASE_URL: str = Field(default="https://your_supabase_project_id.supabase.co")
     SUPABASE_KEY: str = Field(default="your_supabase_key")
     
@@ -67,6 +68,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Allow extra fields in environment variables
     
     @field_validator("CELERY_BROKER_URL", mode="before")
     def set_celery_broker_url(cls, v: Optional[str], values: Dict[str, Any]) -> str:

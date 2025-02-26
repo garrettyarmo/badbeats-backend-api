@@ -33,11 +33,12 @@ from typing import Dict, Any, List, Optional, Union, Tuple, cast
 from tenacity import retry, stop_after_attempt, wait_exponential
 from dotenv import load_dotenv
 
-# LangChain imports
-from langchain.schema import HumanMessage, SystemMessage
-from langchain.chat_models import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+# LangChain imports - Updated for newest LangChain structure
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.output_parsers import StructuredOutputParser, PydanticOutputParser
 from langchain.chains import LLMChain
 from langchain.memory import ConversationBufferMemory
 
@@ -67,6 +68,14 @@ DEFAULT_MODEL = "gpt-4"  # Default model to use
 MAX_PROMPT_TOKENS = 16000  # Maximum tokens for input context
 MAX_NEWS_ARTICLES = 5  # Maximum number of news articles to include per team
 RECENT_GAMES_LIMIT = 5  # Number of recent games to analyze per team
+
+
+# Define the schema for prediction responses
+class PredictionResponseSchema(BaseModel):
+    """Schema for parsing LLM prediction outputs."""
+    pick: str = Field(description="The team and spread prediction, e.g., 'Lakers -4'. Include the team name and the spread number.")
+    logic: str = Field(description="A paragraph explaining the reasoning behind the prediction, including key factors that influenced the decision.")
+    confidence: float = Field(description="A confidence score from 0.0 to 1.0 (float) representing how confident the model is in this prediction.", ge=0.0, le=1.0)
 
 
 class PredictionError(Exception):
@@ -168,24 +177,8 @@ class LangChainPredictionModel(BasePredictionModel):
         This parser ensures that the LLM's textual output can be
         converted into a structured format matching our prediction schema.
         """
-        # Define the expected response schemas
-        response_schemas = [
-            ResponseSchema(
-                name="pick",
-                description="The team and spread prediction, e.g., 'Lakers -4'. Include the team name and the spread number."
-            ),
-            ResponseSchema(
-                name="logic",
-                description="A paragraph explaining the reasoning behind the prediction, including key factors that influenced the decision."
-            ),
-            ResponseSchema(
-                name="confidence",
-                description="A confidence score from 0.0 to 1.0 (float) representing how confident the model is in this prediction."
-            )
-        ]
-        
-        # Create the structured output parser
-        self._parser = StructuredOutputParser.from_response_schemas(response_schemas)
+        # Create a Pydantic output parser
+        self._parser = PydanticOutputParser(pydantic_object=PredictionResponseSchema)
         
         # Get the format instructions for the LLM
         self._format_instructions = self._parser.get_format_instructions()
@@ -419,12 +412,12 @@ Based on all available information, predict which team will cover the spread.
             parsed_output = self._parser.parse(llm_response)
             
             # Extract and validate the required fields
-            pick = parsed_output.get("pick", "")
-            logic = parsed_output.get("logic", "")
+            pick = parsed_output.pick
+            logic = parsed_output.logic
             
             # Handle confidence - ensure it's a float between 0 and 1
             try:
-                confidence_raw = float(parsed_output.get("confidence", 0.5))
+                confidence_raw = float(parsed_output.confidence)
                 confidence = max(0.0, min(1.0, confidence_raw))
             except (ValueError, TypeError):
                 logger.warning("Could not parse confidence score, using default 0.5")
