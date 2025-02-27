@@ -16,6 +16,9 @@ from .api.health import router as health_router
 from .api.predictions import router as predictions_router
 from .api.auth import router as auth_router
 
+# Import middleware setup function
+from .core.middleware import setup_all_middleware
+
 # Initialize FastAPI app with metadata
 app = FastAPI(
     title="BadBeats API",
@@ -23,14 +26,8 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Restrict this in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure all middleware (CORS, rate limiting, HTTPS redirect, request logging)
+setup_all_middleware(app)
 
 # Root endpoint for basic health check
 @app.get("/")
