@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Import the Health Router and Predictions Router
 from .api.health import router as health_router
 from .api.predictions import router as predictions_router
+from .api.auth import router as auth_router
 
 # Initialize FastAPI app with metadata
 app = FastAPI(
@@ -51,6 +52,9 @@ app.include_router(health_router, prefix="/api/v1")
 
 # Include the predictions router under prefix /api/v1
 app.include_router(predictions_router, prefix="/api/v1")
+
+# Include the authentication router under prefix /api/v1/auth
+app.include_router(auth_router, prefix="/api/v1/auth")
 
 
 # Add favicon endpoint to silence 404s
