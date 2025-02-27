@@ -13,19 +13,19 @@ Below is a Mermaid diagram that represents the high-level flow of the system:
 
 ```mermaid
 flowchart TD
-    A[External Data Sources]
-    B[NBA API (BallDontLie)]
-    C[News Sources (ESPN, NBA.com, Bleacher Report)]
-    D[Data Ingestion Service]
-    E[Database (PostgreSQL/Supabase)]
-    F[Prediction Models (LangChain LLM)]
-    G[Prediction Scheduling (Celery)]
-    H[API Endpoints (FastAPI)]
-    I[Authentication & Security (JWT/OAuth2)]
-    J[Logging & Monitoring]
+    A["External Data Sources"]
+    B["NBA API (BallDontLie)"]
+    C["News Sources (ESPN, NBA.com, Bleacher Report)"]
+    D["Data Ingestion Service"]
+    E["Database (PostgreSQL/Supabase)"]
+    F["Prediction Models (LangChain LLM)"]
+    G["Prediction Scheduling (Celery)"]
+    H["API Endpoints (FastAPI)"]
+    I["Authentication & Security (JWT/OAuth2)"]
+    J["Logging & Monitoring"]
     
-    A -->|Structured & Unstructured Data| B
-    A -->|News and Injury Reports| C
+    A -->|"Structured & Unstructured Data"| B
+    A -->|"News and Injury Reports"| C
     B --> D
     C --> D
     D --> E
