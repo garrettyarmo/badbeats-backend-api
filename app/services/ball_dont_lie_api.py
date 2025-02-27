@@ -74,7 +74,7 @@ async def _make_request(endpoint: str, params: Optional[Dict[str, Any]] = None) 
     
     try:
         logger.debug(f"Making request to BallDontLie API: {url} with params: {params}")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, params=params, headers=headers, timeout=30.0)
             
             # Raise an exception for 4XX and 5XX responses
