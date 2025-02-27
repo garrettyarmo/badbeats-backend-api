@@ -30,25 +30,46 @@ task_routes = {
     "app.workers.tasks.update_game_results": {"queue": QUEUE_RESULTS},
     "app.workers.tasks.ingest_nba_data": {"queue": QUEUE_DATA_INGESTION},
     "app.workers.tasks.schedule_game_predictions": {"queue": QUEUE_SCHEDULERS},
+    "app.workers.tasks.check_new_games": {"queue": QUEUE_SCHEDULERS},
+    "app.workers.tasks.reschedule_missed_predictions": {"queue": QUEUE_SCHEDULERS},
 }
 
 # Beat schedule configuration for periodic tasks
 beat_schedule = {
+    # Data ingestion and game schedule update - every 6 hours
     "fetch-latest-nba-data": {
         "task": "app.workers.tasks.ingest_nba_data",
         "schedule": crontab(hour="*/6", minute="0"),  # Every 6 hours
         "args": (),
     },
+    
+    # Schedule predictions for upcoming games - every 2 hours
     "schedule-upcoming-game-predictions": {
         "task": "app.workers.tasks.schedule_game_predictions",
         "schedule": crontab(hour="*/2", minute="0"),  # Every 2 hours
         "args": (),
     },
+    
+    # Update game results after completion - every 3 hours
     "update-game-results": {
         "task": "app.workers.tasks.update_game_results",
         "schedule": crontab(hour="*/3", minute="15"),  # Every 3 hours
         "args": (),
-    }
+    },
+    
+    # Check for newly added games - every 12 hours
+    "check-new-games": {
+        "task": "app.workers.tasks.check_new_games",
+        "schedule": crontab(hour="*/12", minute="30"),  # Every 12 hours
+        "args": (),
+    },
+    
+    # Rescue missed predictions - every hour
+    "rescue-missed-predictions": {
+        "task": "app.workers.tasks.reschedule_missed_predictions",
+        "schedule": crontab(minute="15"),  # Every hour at 15 minutes past the hour
+        "args": (),
+    },
 }
 
 # Worker configuration
@@ -61,3 +82,7 @@ task_track_started = True
 task_serializer = "json"
 accept_content = ["json"]
 result_serializer = "json"
+
+# Time zone configuration
+timezone = "UTC"
+enable_utc = True

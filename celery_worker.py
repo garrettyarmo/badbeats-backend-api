@@ -9,13 +9,13 @@ clean implementation that redirects to the main worker module.
 
 @usage:
 To start a worker:
-    $ python celery_worker.py worker --loglevel=info
+    $ celery -A celery_worker worker --loglevel=info
 
 To start the beat scheduler:
-    $ python celery_worker.py beat --loglevel=info
+    $ celery -A celery_worker beat --loglevel=info
 
 To start both worker and beat scheduler:
-    $ python celery_worker.py worker --beat --loglevel=info
+    $ celery -A celery_worker worker --beat --loglevel=info
 
 @dependencies:
 - app.workers.celery_app: For Celery configuration
@@ -27,5 +27,12 @@ To start both worker and beat scheduler:
 
 from app.workers.celery_app import celery_app
 
+# This makes the Celery app importable by the Celery command-line interface
+app = celery_app
+
 if __name__ == '__main__':
-    celery_app.start()
+    print("ERROR: This file should not be executed directly.")
+    print("Please use the celery command instead:")
+    print("  $ celery -A celery_worker worker --loglevel=info")
+    print("  $ celery -A celery_worker beat --loglevel=info")
+    print("  $ celery -A celery_worker worker --beat --loglevel=info")

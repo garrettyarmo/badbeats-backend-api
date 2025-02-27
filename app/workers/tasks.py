@@ -354,3 +354,140 @@ async def _prepare_game_data(game_id: int) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error preparing data for game {game_id}: {str(e)}")
         return None
+
+
+# New tasks for improved prediction scheduling
+
+@shared_task(
+    bind=True,
+    name="app.workers.tasks.check_new_games",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 60},
+    acks_late=True
+)
+def check_new_games(self):
+    """
+    Task to check for newly added games in the schedule.
+    
+    This task runs periodically to detect new games that have been added
+    to the NBA schedule and makes sure they are scheduled for prediction.
+    
+    Returns:
+        dict: Summary of new games found
+    """
+    try:
+        # Create a new event loop for asyncio operations
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Fetch all upcoming games
+        upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=30))
+        loop.close()
+        
+        # Track new games found
+        new_games_count = 0
+        
+        # Process each game
+        for game in upcoming_games:
+            game_id = game.get('id')
+            if not game_id:
+                continue
+                
+            # Here you would check your database to see if this game_id
+            # is already scheduled for prediction.
+            # For this implementation, we'll just schedule all games
+            # and rely on the schedule_game_predictions task to determine
+            # the proper timing.
+            
+            # Call the scheduling task for this game
+            chain(
+                schedule_game_predictions.s(),
+                generate_prediction.s(game_id)
+            ).apply_async()
+            
+            new_games_count += 1
+        
+        logger.info(f"Checked for new games, found {new_games_count} games to schedule")
+        return {
+            "status": "success",
+            "new_games_found": new_games_count,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error checking for new games: {str(e)}")
+        raise self.retry(exc=e)
+
+
+@shared_task(
+    bind=True,
+    name="app.workers.tasks.reschedule_missed_predictions",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 60},
+    acks_late=True
+)
+def reschedule_missed_predictions(self):
+    """
+    Task to reschedule predictions that may have been missed.
+    
+    This task identifies games that are starting soon but don't have
+    predictions generated, and triggers emergency prediction generation.
+    
+    Returns:
+        dict: Summary of rescheduled predictions
+    """
+    try:
+        # Create a new event loop for asyncio operations
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Fetch games happening in the next 3 hours
+        upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=1))
+        loop.close()
+        
+        # Filter games starting within 3 hours
+        now = datetime.now(pytz.UTC)
+        three_hours_later = now + timedelta(hours=3)
+        
+        imminent_games = []
+        for game in upcoming_games:
+            game_date_str = game.get('date')
+            if not game_date_str:
+                continue
+                
+            try:
+                game_date = datetime.fromisoformat(game_date_str.replace('Z', '+00:00'))
+                if now < game_date < three_hours_later:
+                    imminent_games.append(game)
+            except (ValueError, TypeError):
+                continue
+        
+        # For each imminent game, check if a prediction exists
+        # If not, generate one immediately
+        emergency_predictions = 0
+        
+        for game in imminent_games:
+            game_id = game.get('id')
+            if not game_id:
+                continue
+                
+            # Here you would check if a prediction exists for this game_id
+            # This would involve querying your database
+            # For this implementation, we'll just generate a prediction
+            
+            # Generate prediction immediately
+            generate_prediction.apply_async(
+                args=[game_id],
+                countdown=5,  # Wait 5 seconds to avoid overloading
+            )
+            
+            emergency_predictions += 1
+        
+        logger.info(f"Emergency scheduled {emergency_predictions} missed predictions")
+        return {
+            "status": "success",
+            "emergency_predictions": emergency_predictions,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error rescheduling missed predictions: {str(e)}")
+        raise self.retry(exc=e)

@@ -1,12 +1,14 @@
 """
 @file: run_celery.py
 @description:
-A simple entry point for starting the Celery worker. This avoids complex import
-chains at startup and makes it easier to debug initialization issues.
+DEPRECATED: Please use celery_worker.py instead.
+
+This file is kept for backward compatibility but will be removed in a future update.
+All functionality has been moved to celery_worker.py for cleaner organization.
 
 @usage:
-To start a worker:
-    $ python run_celery.py
+Instead of using this file, please use:
+    $ python celery_worker.py worker --loglevel=info
 
 @dependencies:
 - celery: For task processing
@@ -14,6 +16,14 @@ To start a worker:
 
 import os
 import sys
+import warnings
+
+warnings.warn(
+    "run_celery.py is deprecated. Please use celery_worker.py instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 from celery import Celery
 from app.core.config import settings
 
@@ -35,6 +45,9 @@ app.conf.task_routes = {
 }
 
 if __name__ == '__main__':
+    # Print deprecation message
+    print("WARNING: run_celery.py is deprecated. Please use celery_worker.py instead.")
+    
     # Launch the worker directly with proper arguments
     worker_args = ['worker', '--loglevel=info']
     sys.argv = [sys.argv[0]] + worker_args
