@@ -7,13 +7,15 @@ It includes CORS policy configuration and rate limiting middleware to prevent AP
 The middleware components include:
 - CORS configuration: Controls which domains can access the API
 - Rate limiting: Prevents abuse by limiting the number of requests per time period
+- Request logging: Logs information about each request and its processing time
+- HTTPS redirect: Ensures secure connections in production
 
 @dependencies:
 - fastapi: For CORSMiddleware
 - fastapi_limiter: For rate limiting
 - redis: As a backend for rate limiting
 - app.core.config: For application settings
-- app.core.logger: For logging
+- app.core.logger: For structured logging
 
 @notes:
 - CORS is configured differently for development vs. production environments
@@ -34,7 +36,10 @@ import fastapi_limiter
 from fastapi_limiter.depends import RateLimiter
 
 from app.core.config import settings
-from app.core.logger import logger
+from app.core.logger import setup_logger, log_request_details
+
+# Create a component-specific logger
+logger = setup_logger("app.core.middleware")
 
 
 def setup_cors(app: FastAPI) -> None:
@@ -142,6 +147,7 @@ class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
                 
                 # Create a redirect response
                 from starlette.responses import RedirectResponse
+                logger.debug(f"Redirecting HTTP request to HTTPS: {https_url}")
                 return RedirectResponse(
                     https_url, 
                     status_code=301  # Permanent redirect
@@ -205,11 +211,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         # Calculate processing time
         process_time = time.time() - start_time
         
-        # Log request details
-        logger.info(
-            f"{request.method} {request.url.path} from {client_ip} "
-            f"completed with status {response.status_code} in {process_time:.3f}s"
-        )
+        # Log request details using the structured logging function
+        log_request_details(logger, request, process_time, response.status_code)
         
         return response
 
@@ -249,3 +252,4 @@ def setup_all_middleware(app: FastAPI) -> None:
     @app.on_event("startup")
     async def initialize_rate_limiter():
         await setup_rate_limiting(app)
+        logger.info("All middleware initialized successfully")

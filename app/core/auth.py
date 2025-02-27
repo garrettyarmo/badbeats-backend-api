@@ -15,6 +15,7 @@ using OAuth2 with JWT tokens. It provides functions for:
 - fastapi.security: For OAuth2 implementation
 - pydantic: For data validation
 - app.core.config: For configuration settings
+- app.core.logger: For component-specific logging
 
 @notes:
 - Passwords are hashed using bcrypt algorithm
@@ -33,7 +34,10 @@ from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import settings
-from app.core.logger import logger
+from app.core.logger import setup_logger
+
+# Create a component-specific logger
+logger = setup_logger("app.core.auth")
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

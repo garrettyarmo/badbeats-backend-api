@@ -11,7 +11,7 @@ and processes the LLM responses into structured prediction outputs.
 - openai: For API access to GPT models
 - app.llm.base_model: For the prediction model interface
 - app.services: For data ingestion from external APIs and news sources
-- app.core.logger: For logging
+- app.core.logger: For component-specific logging
 - dotenv: For environment variable management
 - tenacity: For retry logic
 - typing: For type hints
@@ -56,7 +56,10 @@ from app.services.news_ingestion import (
     get_team_injury_report,
     preprocess_text_for_llm
 )
-from app.core.logger import logger
+from app.core.logger import setup_logger
+
+# Create a component-specific logger
+logger = setup_logger("app.llm.langchain_model")
 
 # Load environment variables
 load_dotenv()
@@ -114,10 +117,13 @@ class LangChainPredictionModel(BasePredictionModel):
         """
         # Validate API keys
         if provider == "openai" and not OPENAI_API_KEY:
+            logger.error("OpenAI API key not found in environment variables")
             raise ValueError("OpenAI API key not found in environment variables")
         elif provider == "groq" and not GROQ_API_KEY:
+            logger.error("Groq API key not found in environment variables")
             raise ValueError("Groq API key not found in environment variables")
         elif provider not in ["openai", "groq"]:
+            logger.error(f"Invalid provider: {provider}. Must be 'openai' or 'groq'")
             raise ValueError(f"Invalid provider: {provider}. Must be 'openai' or 'groq'")
             
         self._provider = provider
@@ -219,6 +225,7 @@ class LangChainPredictionModel(BasePredictionModel):
             
             # Limit the number of news articles to avoid token limits
             if len(news_articles) > MAX_NEWS_ARTICLES:
+                logger.debug(f"Limiting news articles for {team_name} from {len(news_articles)} to {MAX_NEWS_ARTICLES}")
                 news_articles = news_articles[:MAX_NEWS_ARTICLES]
             
             return {
@@ -319,6 +326,7 @@ Return your prediction as a JSON object with the following fields:
 - logic: A paragraph explaining your reasoning
 - confidence: A number between 0 and 1 representing your confidence level
 """
+        logger.debug(f"Prepared prediction prompt for game {input_data.game_id}")
         return prompt
     
     def _format_team_stats(self, stats: List[Dict[str, Any]]) -> str:
@@ -420,11 +428,14 @@ Return your prediction as a JSON object with the following fields:
                 if json_start >= 0 and json_end > json_start:
                     json_str = llm_response[json_start:json_end]
                     parsed_output = json.loads(json_str)
+                    logger.debug("Successfully parsed LLM response as JSON")
                 else:
                     # If no JSON brackets found, try to parse the whole response
                     parsed_output = json.loads(llm_response)
+                    logger.debug("Successfully parsed full LLM response as JSON")
             except json.JSONDecodeError:
                 # If direct JSON parsing fails, use regex to extract key fields
+                logger.warning("JSON parsing failed, falling back to regex extraction")
                 import re
                 
                 pick_match = re.search(r'"pick"\s*:\s*"([^"]+)"', llm_response)
@@ -437,7 +448,9 @@ Return your prediction as a JSON object with the following fields:
                         "logic": logic_match.group(1),
                         "confidence": float(confidence_match.group(1))
                     }
+                    logger.debug("Successfully extracted prediction fields using regex")
                 else:
+                    logger.error("Failed to extract prediction fields using regex")
                     raise ValueError("Could not extract prediction fields from response")
             
             # Extract and validate the required fields
@@ -454,6 +467,7 @@ Return your prediction as a JSON object with the following fields:
             
             # Apply confidence calibration
             calibrated_confidence = self._calibrate_confidence(confidence)
+            logger.debug(f"Calibrated confidence from {confidence} to {calibrated_confidence}")
             
             return {
                 "pick": pick,
@@ -498,6 +512,7 @@ Return your prediction as a JSON object with the following fields:
             
             # Gather data for both teams concurrently
             import asyncio
+            logger.debug(f"Gathering data for teams: {input_data.home_team} (ID: {home_team_id}) and {input_data.away_team} (ID: {away_team_id})")
             home_team_data, away_team_data = await asyncio.gather(
                 self._gather_team_data(home_team_id, input_data.home_team),
                 self._gather_team_data(away_team_id, input_data.away_team)
@@ -520,10 +535,12 @@ Return your prediction as a JSON object with the following fields:
             ]
             
             # Send to LLM and get response
+            logger.info(f"Sending prediction request to {self._provider} LLM")
             response = await self._llm.agenerate([messages])
             llm_response = response.generations[0][0].text
             
             # Parse the LLM response
+            logger.debug("Parsing LLM response")
             prediction_data = await self._extract_prediction_from_llm_response(llm_response)
             
             # Create and return the prediction result
@@ -541,7 +558,7 @@ Return your prediction as a JSON object with the following fields:
                 }
             )
             
-            logger.info(f"Successfully generated prediction for game {input_data.game_id}")
+            logger.info(f"Successfully generated prediction for game {input_data.game_id}: {result.pick} (confidence: {result.confidence:.2f})")
             return result
             
         except Exception as e:
@@ -567,8 +584,11 @@ Return your prediction as a JSON object with the following fields:
         results = []
         errors = []
         
+        logger.info(f"Starting batch prediction for {len(inputs)} games")
+        
         for input_data in inputs:
             try:
+                logger.debug(f"Processing game {input_data.game_id} in batch")
                 prediction = await self.predict(input_data)
                 results.append(prediction)
             except Exception as e:
@@ -577,10 +597,13 @@ Return your prediction as a JSON object with the following fields:
         
         if errors and not results:
             # All predictions failed
+            logger.error(f"All batch predictions failed: {len(errors)} errors")
             raise PredictionError(f"All batch predictions failed: {'; '.join(errors)}")
         elif errors:
             # Some predictions failed, but we'll return the successful ones
-            logger.warning(f"Some batch predictions failed: {'; '.join(errors)}")
+            logger.warning(f"Some batch predictions failed: {len(errors)} errors out of {len(inputs)} games")
+        else:
+            logger.info(f"Successfully completed batch predictions for all {len(inputs)} games")
         
         return results
     
@@ -600,6 +623,8 @@ Return your prediction as a JSON object with the following fields:
         Raises:
             ValueError: If input data or actual result is invalid
         """
+        logger.info(f"Evaluating prediction for game {input_data.game_id} with actual result: {actual_result}")
+        
         # Generate a prediction if we don't already have one
         prediction = await self.predict(input_data)
         
@@ -608,6 +633,12 @@ Return your prediction as a JSON object with the following fields:
         
         # Calculate confidence calibration metrics
         confidence_error = abs((1.0 if is_correct else 0.0) - prediction.confidence)
+        
+        # Log the evaluation results
+        if is_correct:
+            logger.info(f"Correct prediction for game {input_data.game_id} with confidence {prediction.confidence:.2f}")
+        else:
+            logger.warning(f"Incorrect prediction for game {input_data.game_id} with confidence {prediction.confidence:.2f}")
         
         # Return evaluation metrics
         return {
@@ -640,6 +671,7 @@ def create_langchain_prediction_model(
     Returns:
         Configured LangChainPredictionModel instance
     """
+    logger.info(f"Creating LangChain prediction model with {provider} provider and {model_name} model")
     return LangChainPredictionModel(
         model_name=model_name,
         provider=provider,

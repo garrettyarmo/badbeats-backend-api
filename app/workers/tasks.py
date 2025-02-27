@@ -17,7 +17,7 @@ and executing AI-driven predictions for NBA games. The tasks handle:
 - app.llm.langchain_model: For prediction generation
 - app.services.prediction_service: For storing predictions
 - app.schemas.predictions: For data validation
-- app.core.logger: For logging
+- app.core.logger: For component-specific logging
 
 @notes:
 - Tasks use retry mechanisms for resilience
@@ -48,7 +48,10 @@ from app.services.prediction_service import create_prediction
 from app.llm.langchain_model import create_langchain_prediction_model
 from app.llm.base_model import PredictionInput
 from app.schemas.predictions import PredictionCreate
-from app.core.logger import logger
+from app.core.logger import setup_logger, get_task_logger
+
+# Create a task-specific logger
+logger = setup_logger("app.workers.tasks")
 
 
 @shared_task(
@@ -68,23 +71,26 @@ def ingest_nba_data(self):
     Returns:
         dict: Summary of ingested data
     """
+    task_logger = get_task_logger(self.name)
     try:
+        task_logger.info("Starting NBA data ingestion task")
         # Create a new event loop for asyncio operations
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         # Fetch upcoming games
+        task_logger.debug("Fetching upcoming games")
         upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=7))
         loop.close()
         
-        logger.info(f"Ingested {len(upcoming_games)} upcoming games")
+        task_logger.info(f"Ingested {len(upcoming_games)} upcoming games")
         return {
             "status": "success",
             "games_ingested": len(upcoming_games),
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error ingesting NBA data: {str(e)}")
+        task_logger.error(f"Error ingesting NBA data: {str(e)}")
         raise self.retry(exc=e)
 
 
@@ -105,12 +111,15 @@ def schedule_game_predictions(self):
     Returns:
         dict: Summary of scheduled predictions
     """
+    task_logger = get_task_logger(self.name)
     try:
+        task_logger.info("Starting game prediction scheduling task")
         # Create a new event loop for asyncio operations
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         # Fetch upcoming games
+        task_logger.debug("Fetching upcoming games")
         upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=7))
         loop.close()
         
@@ -120,7 +129,7 @@ def schedule_game_predictions(self):
                 # Parse game start time
                 game_date_str = game.get('date')
                 if not game_date_str:
-                    logger.warning(f"Game ID {game.get('id')} has no date")
+                    task_logger.warning(f"Game ID {game.get('id')} has no date")
                     continue
                 
                 # Parse the date string to datetime object
@@ -139,7 +148,7 @@ def schedule_game_predictions(self):
                     home_team = game.get('home_team', {}).get('name', 'Unknown')
                     away_team = game.get('visitor_team', {}).get('name', 'Unknown')
                     
-                    logger.info(
+                    task_logger.info(
                         f"Scheduling prediction for game {game.get('id')}: "
                         f"{away_team} @ {home_team} at {eta.isoformat()}"
                     )
@@ -159,17 +168,17 @@ def schedule_game_predictions(self):
                     
                     scheduled_count += 1
             except Exception as e:
-                logger.error(f"Error scheduling prediction for game {game.get('id')}: {str(e)}")
+                task_logger.error(f"Error scheduling prediction for game {game.get('id')}: {str(e)}")
                 continue
         
-        logger.info(f"Scheduled {scheduled_count} game predictions")
+        task_logger.info(f"Scheduled {scheduled_count} game predictions")
         return {
             "status": "success",
             "predictions_scheduled": scheduled_count,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error scheduling game predictions: {str(e)}")
+        task_logger.error(f"Error scheduling game predictions: {str(e)}")
         raise self.retry(exc=e)
 
 
@@ -193,16 +202,19 @@ def generate_prediction(self, game_id: int):
     Returns:
         dict: Summary of the generated prediction
     """
+    task_logger = get_task_logger(self.name)
     try:
+        task_logger.info(f"Starting prediction generation for game {game_id}")
         # Create a new event loop for asyncio operations
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         # Prepare game data for prediction
+        task_logger.debug(f"Gathering data for game {game_id}")
         game_data = loop.run_until_complete(_prepare_game_data(game_id))
         
         if not game_data:
-            logger.error(f"Failed to gather data for game {game_id}")
+            task_logger.error(f"Failed to gather data for game {game_id}")
             return {
                 "status": "error",
                 "message": f"Failed to gather data for game {game_id}",
@@ -210,6 +222,7 @@ def generate_prediction(self, game_id: int):
             }
         
         # Initialize the prediction model
+        task_logger.debug("Initializing prediction model")
         prediction_model = create_langchain_prediction_model()
         
         # Create prediction input
@@ -224,6 +237,7 @@ def generate_prediction(self, game_id: int):
         )
         
         # Generate prediction (async)
+        task_logger.info(f"Generating prediction for game {game_id}: {game_data['away_team']} @ {game_data['home_team']}")
         prediction_result = loop.run_until_complete(prediction_model.predict(prediction_input))
         loop.close()
         
@@ -239,7 +253,7 @@ def generate_prediction(self, game_id: int):
         
         saved_prediction = create_prediction(prediction_create)
         
-        logger.info(f"Generated prediction for game {game_id}: {saved_prediction.pick}")
+        task_logger.info(f"Generated prediction for game {game_id}: {saved_prediction.pick} (confidence: {saved_prediction.confidence:.2f})")
         return {
             "status": "success",
             "game_id": game_id,
@@ -248,7 +262,7 @@ def generate_prediction(self, game_id: int):
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error generating prediction for game {game_id}: {str(e)}")
+        task_logger.error(f"Error generating prediction for game {game_id}: {str(e)}")
         raise self.retry(exc=e)
 
 
@@ -274,7 +288,8 @@ def update_game_results(self):
     # Implementation would depend on how we track game results and determine winners
     # For now, this is a placeholder
     
-    logger.info("Updating game results (placeholder implementation)")
+    task_logger = get_task_logger(self.name)
+    task_logger.info("Updating game results (placeholder implementation)")
     return {
         "status": "success",
         "message": "Game results update not yet implemented",
@@ -295,11 +310,13 @@ async def _prepare_game_data(game_id: int) -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict[str, Any]]: Dictionary with all game data or None if data gathering fails
     """
+    data_logger = setup_logger("app.workers.tasks.prepare_game_data")
     try:
+        data_logger.info(f"Preparing data for game {game_id}")
         # Fetch basic game information
         game_info = await get_game_by_id(game_id)
         if not game_info:
-            logger.error(f"Could not find game with ID {game_id}")
+            data_logger.error(f"Could not find game with ID {game_id}")
             return None
         
         # Extract team information
@@ -307,6 +324,8 @@ async def _prepare_game_data(game_id: int) -> Optional[Dict[str, Any]]:
         away_team_id = game_info.get('visitor_team', {}).get('id')
         home_team_name = game_info.get('home_team', {}).get('name', 'Unknown')
         away_team_name = game_info.get('visitor_team', {}).get('name', 'Unknown')
+        
+        data_logger.debug(f"Game {game_id}: {away_team_name} @ {home_team_name}")
         
         # Mocked spread for now (would come from odds API in a real implementation)
         # Positive means home team is underdog, negative means home team is favorite
@@ -316,6 +335,7 @@ async def _prepare_game_data(game_id: int) -> Optional[Dict[str, Any]]:
         game_date = game_info.get('date', datetime.now().isoformat())
         
         # Gather team data concurrently
+        data_logger.debug(f"Gathering team data for {home_team_name} and {away_team_name}")
         home_team_stats, away_team_stats, home_team_news, away_team_news, home_injuries, away_injuries = await asyncio.gather(
             get_team_stats_averages(home_team_id),
             get_team_stats_averages(away_team_id),
@@ -342,6 +362,7 @@ async def _prepare_game_data(game_id: int) -> Optional[Dict[str, Any]]:
             "away_team_injuries": away_injuries
         }
         
+        data_logger.info(f"Successfully prepared data for game {game_id}")
         return {
             "game_id": game_id,
             "home_team": home_team_name,
@@ -352,7 +373,7 @@ async def _prepare_game_data(game_id: int) -> Optional[Dict[str, Any]]:
             "unstructured_data": unstructured_data
         }
     except Exception as e:
-        logger.error(f"Error preparing data for game {game_id}: {str(e)}")
+        data_logger.error(f"Error preparing data for game {game_id}: {str(e)}")
         return None
 
 
@@ -375,12 +396,15 @@ def check_new_games(self):
     Returns:
         dict: Summary of new games found
     """
+    task_logger = get_task_logger(self.name)
     try:
+        task_logger.info("Checking for new games in schedule")
         # Create a new event loop for asyncio operations
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         # Fetch all upcoming games
+        task_logger.debug("Fetching upcoming games for next 30 days")
         upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=30))
         loop.close()
         
@@ -400,6 +424,7 @@ def check_new_games(self):
             # the proper timing.
             
             # Call the scheduling task for this game
+            task_logger.debug(f"Scheduling game {game_id}")
             chain(
                 schedule_game_predictions.s(),
                 generate_prediction.s(game_id)
@@ -407,14 +432,14 @@ def check_new_games(self):
             
             new_games_count += 1
         
-        logger.info(f"Checked for new games, found {new_games_count} games to schedule")
+        task_logger.info(f"Checked for new games, found {new_games_count} games to schedule")
         return {
             "status": "success",
             "new_games_found": new_games_count,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error checking for new games: {str(e)}")
+        task_logger.error(f"Error checking for new games: {str(e)}")
         raise self.retry(exc=e)
 
 
@@ -435,12 +460,15 @@ def reschedule_missed_predictions(self):
     Returns:
         dict: Summary of rescheduled predictions
     """
+    task_logger = get_task_logger(self.name)
     try:
+        task_logger.info("Checking for missed predictions to reschedule")
         # Create a new event loop for asyncio operations
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         # Fetch games happening in the next 3 hours
+        task_logger.debug("Fetching upcoming games for next 24 hours")
         upcoming_games = loop.run_until_complete(get_upcoming_games(days_ahead=1))
         loop.close()
         
@@ -457,9 +485,13 @@ def reschedule_missed_predictions(self):
             try:
                 game_date = datetime.fromisoformat(game_date_str.replace('Z', '+00:00'))
                 if now < game_date < three_hours_later:
+                    task_logger.debug(f"Found imminent game {game.get('id')} at {game_date}")
                     imminent_games.append(game)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
+                task_logger.warning(f"Error parsing date for game {game.get('id')}: {str(e)}")
                 continue
+        
+        task_logger.debug(f"Found {len(imminent_games)} imminent games")
         
         # For each imminent game, check if a prediction exists
         # If not, generate one immediately
@@ -475,6 +507,7 @@ def reschedule_missed_predictions(self):
             # For this implementation, we'll just generate a prediction
             
             # Generate prediction immediately
+            task_logger.info(f"Emergency scheduling prediction for game {game_id}")
             generate_prediction.apply_async(
                 args=[game_id],
                 countdown=5,  # Wait 5 seconds to avoid overloading
@@ -482,12 +515,12 @@ def reschedule_missed_predictions(self):
             
             emergency_predictions += 1
         
-        logger.info(f"Emergency scheduled {emergency_predictions} missed predictions")
+        task_logger.info(f"Emergency scheduled {emergency_predictions} missed predictions")
         return {
             "status": "success",
             "emergency_predictions": emergency_predictions,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error rescheduling missed predictions: {str(e)}")
+        task_logger.error(f"Error rescheduling missed predictions: {str(e)}")
         raise self.retry(exc=e)

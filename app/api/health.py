@@ -6,6 +6,7 @@ is running and responding.
 
 @dependencies:
 - FastAPI APIRouter for route definitions.
+- app.core.logger: For component-specific logging
 
 @notes:
 - This endpoint is separate from the root endpoint ("/") to follow
@@ -15,6 +16,10 @@ is running and responding.
 """
 
 from fastapi import APIRouter
+from app.core.logger import setup_logger
+
+# Create a component-specific logger
+logger = setup_logger("app.api.health")
 
 # Create a new router instance for health checks
 router = APIRouter()
@@ -31,6 +36,7 @@ async def health_check():
     Returns:
         dict: A dictionary containing status and message.
     """
+    logger.debug("Health check requested")
     return {
         "status": "OK",
         "message": "Health check successful"

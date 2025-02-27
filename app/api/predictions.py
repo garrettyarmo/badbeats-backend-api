@@ -15,6 +15,7 @@ Routes:
 - Pydantic schemas (PredictionCreate, PredictionOut, PredictionsResponse) 
   for validation and serialization.
 - app.core.auth for authentication and authorization.
+- app.core.logger for component-specific logging.
 
 @assumptions:
 - The 'predictions' table exists in Supabase and matches the data schema.
@@ -39,7 +40,10 @@ from app.core.auth import (
     get_current_active_user
 )
 from supabase import SupabaseException
-from app.core.logger import logger
+from app.core.logger import setup_logger
+
+# Create a component-specific logger
+logger = setup_logger("app.api.predictions")
 
 router = APIRouter()
 
@@ -81,6 +85,7 @@ def get_predictions(
     try:
         logger.info(f"User {current_user.id} requesting predictions")
         predictions_list = get_all_predictions()
+        logger.debug(f"Successfully retrieved {len(predictions_list)} predictions")
         return PredictionsResponse(picks=predictions_list)
     except SupabaseException as e:
         logger.error(f"Database error retrieving predictions: {str(e)}")
@@ -137,8 +142,9 @@ def create_new_prediction(
     }
     """
     try:
-        logger.info(f"User {current_user.id} creating new prediction")
+        logger.info(f"User {current_user.id} creating new prediction for game {prediction_in.game_id}")
         new_pred = create_prediction(prediction_in)
+        logger.info(f"Successfully created prediction for game {prediction_in.game_id}")
         return new_pred
     except SupabaseException as e:
         logger.error(f"Database error creating prediction: {str(e)}")

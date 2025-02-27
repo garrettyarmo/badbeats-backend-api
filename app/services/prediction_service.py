@@ -9,6 +9,7 @@ and managing betting predictions in the Supabase database.
 - pydantic schemas (PredictionCreate, PredictionOut) for validation.
 - python's uuid library for generating UUIDs.
 - typing library for type annotations.
+- app.core.logger: For component-specific logging.
 
 @notes:
 - We store predictions in a Supabase table named "predictions".
@@ -36,6 +37,10 @@ from supabase import SupabaseException
 
 from app.db.supabase_client import supabase
 from app.schemas.predictions import PredictionCreate, PredictionOut
+from app.core.logger import setup_logger
+
+# Create a component-specific logger
+logger = setup_logger("app.services.prediction_service")
 
 def create_prediction(prediction_in: PredictionCreate) -> PredictionOut:
     """
@@ -65,14 +70,20 @@ def create_prediction(prediction_in: PredictionCreate) -> PredictionOut:
     }
 
     try:
+        logger.info(f"Creating prediction for game {prediction_in.game_id} with pick: {prediction_in.pick}")
         # Insert into Supabase
         response = supabase.table("predictions").insert(record_data).execute()
         if response.data is None:
             # If Supabase didn't return data, raise an error
-            raise SupabaseException(response.error or "Unknown error during insertion.")
+            error_msg = "Unknown error during insertion."
+            if response.error:
+                error_msg = response.error
+            logger.error(f"Supabase insertion error: {error_msg}")
+            raise SupabaseException(error_msg)
         
         # We'll take the inserted row from Supabase
         inserted_row = response.data[0]
+        logger.debug(f"Successfully inserted prediction with ID: {record_id}")
         
         # Build a PredictionOut object from the row data
         created_prediction = PredictionOut(
@@ -87,6 +98,7 @@ def create_prediction(prediction_in: PredictionCreate) -> PredictionOut:
     
     except Exception as e:
         # Catch any errors from supabase or Python
+        logger.error(f"Failed to create prediction: {str(e)}")
         raise SupabaseException(f"Failed to create prediction: {str(e)}")
 
 
@@ -102,12 +114,18 @@ def get_all_predictions() -> List[PredictionOut]:
         SupabaseException: If retrieval fails.
     """
     try:
+        logger.info("Retrieving all predictions")
         response = supabase.table("predictions").select("*").execute()
         if response.data is None:
             # If Supabase didn't return data, raise an error
-            raise SupabaseException(response.error or "Unknown error during retrieval.")
+            error_msg = "Unknown error during retrieval."
+            if response.error:
+                error_msg = response.error
+            logger.error(f"Supabase retrieval error: {error_msg}")
+            raise SupabaseException(error_msg)
         
         rows = response.data
+        logger.debug(f"Retrieved {len(rows)} predictions from Supabase")
         # Convert each row into a PredictionOut model 
         predictions_out = []
         for row in rows:
@@ -123,4 +141,5 @@ def get_all_predictions() -> List[PredictionOut]:
             )
         return predictions_out
     except Exception as e:
+        logger.error(f"Failed to retrieve predictions: {str(e)}")
         raise SupabaseException(f"Failed to retrieve predictions: {str(e)}")

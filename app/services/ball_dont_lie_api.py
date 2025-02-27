@@ -12,7 +12,7 @@ API Documentation: https://docs.balldontlie.io/#nba-api
 - tenacity: For retry logic
 - datetime: For date handling and formatting
 - typing: For type annotations
-- app.core.logger: For structured logging
+- app.core.logger: For component-specific logging
 
 @notes:
 - This module uses async/await for better performance with FastAPI
@@ -30,7 +30,10 @@ from datetime import datetime, timedelta
 from tenacity import retry, stop_after_attempt, wait_exponential
 from dotenv import load_dotenv
 
-from app.core.logger import logger
+from app.core.logger import setup_logger
+
+# Create a component-specific logger
+logger = setup_logger("app.services.ball_dont_lie_api")
 
 # Load environment variables (in case they haven't been loaded yet)
 load_dotenv()
@@ -77,6 +80,7 @@ async def _make_request(endpoint: str, params: Optional[Dict[str, Any]] = None) 
             # Raise an exception for 4XX and 5XX responses
             response.raise_for_status()
             
+            logger.debug(f"Received successful response from BallDontLie API: {url}")
             return response.json()
             
     except httpx.HTTPStatusError as e:
@@ -105,6 +109,7 @@ async def get_all_teams() -> List[Dict[str, Any]]:
         BallDontLieAPIError: If the API request fails
     """
     try:
+        logger.info("Fetching all NBA teams")
         response = await _make_request("teams")
         teams = response.get("data", [])
         logger.info(f"Successfully fetched {len(teams)} teams from BallDontLie API")
@@ -129,6 +134,7 @@ async def get_team_by_id(team_id: int) -> Dict[str, Any]:
         BallDontLieAPIError: If the API request fails or team is not found
     """
     try:
+        logger.info(f"Fetching team with ID {team_id}")
         response = await _make_request(f"teams/{team_id}")
         logger.info(f"Successfully fetched team with ID {team_id}")
         return response
@@ -179,6 +185,7 @@ async def get_games(
         params["team_ids[]"] = team_ids
     
     try:
+        logger.info(f"Fetching games with filters: date={date}, start_date={start_date}, end_date={end_date}, team_ids={team_ids}")
         response = await _make_request("games", params=params)
         logger.info(f"Successfully fetched {len(response.get('data', []))} games with specified filters")
         return response
@@ -202,6 +209,7 @@ async def get_game_by_id(game_id: int) -> Dict[str, Any]:
         BallDontLieAPIError: If the API request fails or game is not found
     """
     try:
+        logger.info(f"Fetching game with ID {game_id}")
         response = await _make_request(f"games/{game_id}")
         logger.info(f"Successfully fetched game with ID {game_id}")
         return response
@@ -228,6 +236,7 @@ async def get_upcoming_games(days_ahead: int = 7) -> List[Dict[str, Any]]:
     end_date = today + timedelta(days=days_ahead)
     
     try:
+        logger.info(f"Fetching upcoming games for the next {days_ahead} days")
         response = await get_games(
             start_date=today,
             end_date=end_date,
@@ -275,6 +284,7 @@ async def get_players(
         params["team_ids[]"] = team_ids
     
     try:
+        logger.info(f"Fetching players with search={search}, team_ids={team_ids}")
         response = await _make_request("players", params=params)
         logger.info(f"Successfully fetched {len(response.get('data', []))} players with specified filters")
         return response
@@ -298,6 +308,7 @@ async def get_player_by_id(player_id: int) -> Dict[str, Any]:
         BallDontLieAPIError: If the API request fails or player is not found
     """
     try:
+        logger.info(f"Fetching player with ID {player_id}")
         response = await _make_request(f"players/{player_id}")
         logger.info(f"Successfully fetched player with ID {player_id}")
         return response
@@ -348,6 +359,7 @@ async def get_player_stats(
         params["seasons[]"] = seasons
     
     try:
+        logger.info(f"Fetching player stats with filters: player_ids={player_ids}, game_ids={game_ids}, team_ids={team_ids}, seasons={seasons}")
         response = await _make_request("stats", params=params)
         logger.info(f"Successfully fetched {len(response.get('data', []))} player stats with specified filters")
         return response
@@ -382,6 +394,7 @@ async def get_team_stats_averages(
         params["seasons[]"] = [season]
     
     try:
+        logger.info(f"Fetching team stats averages for team ID {team_id}, season {season}")
         response = await _make_request("season_averages", params=params)
         logger.info(f"Successfully fetched stats averages for team ID {team_id}")
         return response
@@ -416,6 +429,7 @@ async def get_player_season_averages(
         params["season"] = season
     
     try:
+        logger.info(f"Fetching season averages for {len(player_ids)} players, season {season}")
         response = await _make_request("season_averages", params=params)
         logger.info(f"Successfully fetched season averages for {len(player_ids)} players")
         return response
@@ -455,6 +469,7 @@ async def get_current_season_games(team_id: Optional[int] = None) -> List[Dict[s
     team_ids = [team_id] if team_id else None
     
     try:
+        logger.info(f"Fetching current season games (season {season_start_year}-{season_start_year + 1}){' for team ID ' + str(team_id) if team_id else ''}")
         all_games = []
         page = 1
         
@@ -474,6 +489,8 @@ async def get_current_season_games(team_id: Optional[int] = None) -> List[Dict[s
             meta = response.get("meta", {})
             current_page = meta.get("current_page", 1)
             total_pages = meta.get("total_pages", 1)
+            
+            logger.debug(f"Fetched page {current_page} of {total_pages} of current season games")
             
             if current_page >= total_pages:
                 break

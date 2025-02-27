@@ -11,7 +11,7 @@ unstructured data that can be used to enhance prediction models.
 - beautifulsoup4: For HTML parsing and web scraping
 - feedparser: For RSS feed parsing
 - tenacity: For retry mechanisms
-- app.core.logger: For logging
+- app.core.logger: For structured logging
 - html2text: For converting HTML to plain text
 
 @notes:
@@ -35,9 +35,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 import html2text
 from urllib.parse import urlparse
 
-from app.core.logger import logger
+from app.core.logger import setup_logger
 
-# ... rest of the file remains the same
+# Create a component-specific logger
+logger = setup_logger("app.services.news_ingestion")
 
 # Constants
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -80,9 +81,11 @@ async def fetch_url(url: str, headers: Optional[Dict[str, str]] = None) -> str:
         headers = {"User-Agent": USER_AGENT}
         
     try:
+        logger.debug(f"Fetching URL: {url}")
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers=headers, timeout=DEFAULT_REQUEST_TIMEOUT)
             response.raise_for_status()
+            logger.debug(f"Successfully fetched URL: {url}")
             return response.text
     except httpx.RequestError as e:
         logger.error(f"Request error for URL {url}: {str(e)}")
@@ -117,6 +120,7 @@ async def fetch_espn_nba_news() -> List[Dict[str, Any]]:
         NewsIngestionError: If fetching or parsing fails
     """
     try:
+        logger.info("Fetching NBA news from ESPN RSS feed")
         # Parse the RSS feed
         feed = feedparser.parse(ESPN_NBA_RSS)
         
@@ -126,6 +130,7 @@ async def fetch_espn_nba_news() -> List[Dict[str, Any]]:
             
             # Skip if we've already processed this URL
             if url in seen_urls:
+                logger.debug(f"Skipping already processed URL: {url}")
                 continue
                 
             # Check cache
@@ -133,11 +138,13 @@ async def fetch_espn_nba_news() -> List[Dict[str, Any]]:
             if url in article_cache:
                 cache_time, article_data = article_cache[url]
                 if current_time - cache_time < CACHE_TTL:
+                    logger.debug(f"Using cached data for URL: {url}")
                     articles.append(article_data)
                     continue
             
             # Fetch the full article content
             try:
+                logger.debug(f"Fetching full article content from ESPN: {url}")
                 html_content = await fetch_url(url)
                 
                 # Parse HTML
@@ -162,6 +169,7 @@ async def fetch_espn_nba_news() -> List[Dict[str, Any]]:
                     content_text = re.sub(r'\s+', ' ', content_text)
                     content_text = content_text.strip()
                 else:
+                    logger.warning(f"Could not find article body for URL: {url}")
                     content_text = entry.summary if hasattr(entry, 'summary') else ""
                 
                 # Create article data
@@ -181,6 +189,7 @@ async def fetch_espn_nba_news() -> List[Dict[str, Any]]:
                 seen_urls.add(url)
                 
                 articles.append(article_data)
+                logger.debug(f"Successfully processed article: {entry.title}")
                 
                 # Be nice to the server - add small delay between requests
                 await asyncio.sleep(0.5)
@@ -219,6 +228,7 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
         NewsIngestionError: If fetching or parsing fails
     """
     try:
+        logger.info("Fetching news from NBA.com")
         html_content = await fetch_url(NBA_COM_NEWS_URL)
         soup = BeautifulSoup(html_content, 'html.parser')
         
@@ -226,6 +236,7 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
         
         # Find article containers
         article_elements = soup.select('article.ArticleCard') or soup.select('.article-card')
+        logger.debug(f"Found {len(article_elements)} article elements on NBA.com")
         
         for article_elem in article_elements:
             # Extract article details
@@ -234,6 +245,7 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
             
             link_elem = article_elem.select_one('a')
             if not link_elem or not link_elem.get('href'):
+                logger.debug(f"Skipping article with no link: {title}")
                 continue
                 
             href = link_elem['href']
@@ -246,6 +258,7 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
                 
             # Skip if we've already processed this URL
             if url in seen_urls:
+                logger.debug(f"Skipping already processed URL: {url}")
                 continue
                 
             # Check cache
@@ -253,11 +266,13 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
             if url in article_cache:
                 cache_time, article_data = article_cache[url]
                 if current_time - cache_time < CACHE_TTL:
+                    logger.debug(f"Using cached data for URL: {url}")
                     articles.append(article_data)
                     continue
             
             # Fetch the full article content
             try:
+                logger.debug(f"Fetching full article content from NBA.com: {url}")
                 article_html = await fetch_url(url)
                 article_soup = BeautifulSoup(article_html, 'html.parser')
                 
@@ -274,7 +289,8 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
                                 break
                             except ValueError:
                                 continue
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"Failed to parse date '{date_text}': {str(e)}")
                         published_date = None
                 
                 # Extract article content
@@ -293,6 +309,7 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
                     content_text = re.sub(r'\s+', ' ', content_text)
                     content_text = content_text.strip()
                 else:
+                    logger.warning(f"Could not find article content for URL: {url}")
                     content_text = ""
                 
                 # Try to extract summary
@@ -313,6 +330,7 @@ async def fetch_nba_com_news() -> List[Dict[str, Any]]:
                 seen_urls.add(url)
                 
                 articles.append(article_data)
+                logger.debug(f"Successfully processed article: {title}")
                 
                 # Be nice to the server - add small delay between requests
                 await asyncio.sleep(0.5)
@@ -351,6 +369,7 @@ async def fetch_bleacher_report_nba_news() -> List[Dict[str, Any]]:
         NewsIngestionError: If fetching or parsing fails
     """
     try:
+        logger.info("Fetching NBA news from Bleacher Report RSS feed")
         # Parse the RSS feed
         feed = feedparser.parse(BLEACHER_REPORT_NBA_RSS)
         
@@ -360,6 +379,7 @@ async def fetch_bleacher_report_nba_news() -> List[Dict[str, Any]]:
             
             # Skip if we've already processed this URL
             if url in seen_urls:
+                logger.debug(f"Skipping already processed URL: {url}")
                 continue
                 
             # Check cache
@@ -367,11 +387,13 @@ async def fetch_bleacher_report_nba_news() -> List[Dict[str, Any]]:
             if url in article_cache:
                 cache_time, article_data = article_cache[url]
                 if current_time - cache_time < CACHE_TTL:
+                    logger.debug(f"Using cached data for URL: {url}")
                     articles.append(article_data)
                     continue
             
             # Fetch the full article content
             try:
+                logger.debug(f"Fetching full article content from Bleacher Report: {url}")
                 html_content = await fetch_url(url)
                 
                 # Parse HTML
@@ -396,6 +418,7 @@ async def fetch_bleacher_report_nba_news() -> List[Dict[str, Any]]:
                     content_text = re.sub(r'\s+', ' ', content_text)
                     content_text = content_text.strip()
                 else:
+                    logger.warning(f"Could not find article body for URL: {url}")
                     content_text = entry.summary if hasattr(entry, 'summary') else ""
                 
                 # Create article data
@@ -415,6 +438,7 @@ async def fetch_bleacher_report_nba_news() -> List[Dict[str, Any]]:
                 seen_urls.add(url)
                 
                 articles.append(article_data)
+                logger.debug(f"Successfully processed article: {entry.title}")
                 
                 # Be nice to the server - add small delay between requests
                 await asyncio.sleep(0.5)
@@ -448,6 +472,7 @@ async def fetch_injury_reports() -> List[Dict[str, Any]]:
         NewsIngestionError: If fetching or parsing fails
     """
     try:
+        logger.info("Fetching NBA injury reports")
         # ESPN has a dedicated NBA injuries page
         url = "https://www.espn.com/nba/injuries"
         html_content = await fetch_url(url)
@@ -458,13 +483,16 @@ async def fetch_injury_reports() -> List[Dict[str, Any]]:
         
         # Process each team's injury report
         team_sections = soup.select('.Card')
+        logger.debug(f"Found {len(team_sections)} team sections in injury report")
         
         for section in team_sections:
             team_header = section.select_one('.CardHeader')
             if not team_header:
+                logger.debug("Skipping section with no team header")
                 continue
                 
             team_name = team_header.text.strip()
+            logger.debug(f"Processing injury report for team: {team_name}")
             
             # Process player injuries
             player_rows = section.select('tr.Table__TR')
@@ -490,6 +518,7 @@ async def fetch_injury_reports() -> List[Dict[str, Any]]:
                     'updated_date': datetime.now().isoformat()
                 }
                 
+                logger.debug(f"Recorded injury for {player_name}: {injury_status}")
                 injury_reports.append(injury_data)
         
         logger.info(f"Successfully fetched {len(injury_reports)} NBA injury reports")
@@ -518,7 +547,9 @@ def preprocess_text_for_llm(text: str) -> str:
     """
     if not text:
         return ""
-        
+    
+    logger.debug("Preprocessing text for LLM input")
+    
     # Remove HTML artifacts
     text = re.sub(r'&[a-zA-Z]+;', ' ', text)
     
@@ -541,9 +572,12 @@ def preprocess_text_for_llm(text: str) -> str:
     text = re.sub(r'\n{2,}', '\n\n', text)
     
     # Truncate if too long (100,000 characters is a reasonable limit for most LLMs)
-    if len(text) > 100000:
+    original_length = len(text)
+    if original_length > 100000:
+        logger.warning(f"Truncating text from {original_length} to 100,000 characters")
         text = text[:100000] + "..."
     
+    logger.debug(f"Text preprocessing complete. Original length: {original_length}, New length: {len(text)}")
     return text.strip()
 
 
@@ -561,6 +595,8 @@ def extract_entities_from_text(text: str) -> Dict[str, List[str]]:
     Returns:
         Dictionary with entity types as keys and lists of extracted entities as values
     """
+    logger.debug("Extracting entities from text")
+    
     # Common NBA team names and abbreviations
     team_patterns = [
         r'\b(?:Atlanta|Hawks)\b',
@@ -628,6 +664,8 @@ def extract_entities_from_text(text: str) -> Dict[str, List[str]]:
     non_player_words = {"The NBA", "Los Angeles", "New York", "San Antonio", "Golden State", "Oklahoma City"}
     players = {name for name in potential_players if name not in non_player_words}
     
+    logger.debug(f"Extracted {len(teams)} teams, {len(players)} players, and {len(terms)} basketball terms")
+    
     return {
         "teams": list(teams),
         "players": list(players),
@@ -647,6 +685,7 @@ async def fetch_all_news_sources() -> Dict[str, List[Dict[str, Any]]]:
         }
     """
     try:
+        logger.info("Fetching news from all sources")
         # Import asyncio here to prevent circular imports
         import asyncio
         
@@ -667,24 +706,28 @@ async def fetch_all_news_sources() -> Dict[str, List[Dict[str, Any]]]:
         # ESPN NBA News
         if isinstance(results[0], list):
             articles.extend(results[0])
+            logger.debug(f"Added {len(results[0])} articles from ESPN")
         else:
             logger.error(f"Failed to fetch ESPN NBA news: {results[0]}")
         
         # NBA.com News
         if isinstance(results[1], list):
             articles.extend(results[1])
+            logger.debug(f"Added {len(results[1])} articles from NBA.com")
         else:
             logger.error(f"Failed to fetch NBA.com news: {results[1]}")
         
         # Bleacher Report NBA News
         if isinstance(results[2], list):
             articles.extend(results[2])
+            logger.debug(f"Added {len(results[2])} articles from Bleacher Report")
         else:
             logger.error(f"Failed to fetch Bleacher Report NBA news: {results[2]}")
         
         # Injury Reports
         if isinstance(results[3], list):
             injury_reports.extend(results[3])
+            logger.debug(f"Added {len(results[3])} injury reports")
         else:
             logger.error(f"Failed to fetch injury reports: {results[3]}")
         
@@ -728,6 +771,7 @@ async def get_recent_news_for_team(team_name: str, days: int = 7) -> List[Dict[s
         List of articles about the specified team
     """
     try:
+        logger.info(f"Getting recent news for team: {team_name} (last {days} days)")
         # Get all news
         all_news = await fetch_all_news_sources()
         articles = all_news["articles"]
@@ -743,6 +787,8 @@ async def get_recent_news_for_team(team_name: str, days: int = 7) -> List[Dict[s
             if title_match or content_match or entity_match:
                 team_articles.append(article)
         
+        logger.debug(f"Found {len(team_articles)} articles mentioning {team_name}")
+        
         # Filter by date if publication_date is available
         current_date = datetime.now()
         cutoff_date = current_date - timedelta(days=days)
@@ -754,11 +800,16 @@ async def get_recent_news_for_team(team_name: str, days: int = 7) -> List[Dict[s
                     pub_date = datetime.fromisoformat(article['published_date'])
                     if pub_date >= cutoff_date:
                         recent_team_articles.append(article)
-                except (ValueError, TypeError):
+                        logger.debug(f"Including article from {pub_date.strftime('%Y-%m-%d')}: {article['title']}")
+                    else:
+                        logger.debug(f"Skipping older article from {pub_date.strftime('%Y-%m-%d')}: {article['title']}")
+                except (ValueError, TypeError) as e:
                     # If date parsing fails, include the article anyway
+                    logger.warning(f"Date parsing error for {article['title']}: {str(e)}")
                     recent_team_articles.append(article)
             else:
                 # If no date available, include the article
+                logger.debug(f"Including article with no date: {article['title']}")
                 recent_team_articles.append(article)
         
         logger.info(f"Found {len(recent_team_articles)} recent articles about {team_name}")
@@ -780,6 +831,7 @@ async def get_team_injury_report(team_name: str) -> List[Dict[str, Any]]:
         List of injury reports for the specified team
     """
     try:
+        logger.info(f"Getting injury report for team: {team_name}")
         # Get all injury reports
         all_news = await fetch_all_news_sources()
         injury_reports = all_news["injury_reports"]

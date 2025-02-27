@@ -35,7 +35,10 @@ from app.core.auth import (
     verify_password
 )
 from app.core.config import settings
-from app.core.logger import logger
+from app.core.logger import setup_logger
+
+# Create a component-specific logger
+logger = setup_logger("app.api.auth")
 
 # Create a router instance
 router = APIRouter()
