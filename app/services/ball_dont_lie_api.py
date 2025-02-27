@@ -39,7 +39,7 @@ logger = setup_logger("app.services.ball_dont_lie_api")
 load_dotenv()
 
 # API configuration
-BALL_DONT_LIE_BASE_URL = "https://www.balldontlie.io/api/v1"
+BALL_DONT_LIE_BASE_URL = "https://balldontlie.io/api/v1"
 BALL_DONT_LIE_API_KEY = os.getenv("BALL_DONT_LIE_API_KEY", "")
 
 # Pagination defaults
