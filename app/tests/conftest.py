@@ -21,6 +21,11 @@ Fixtures include:
 - The module configures pytest for the specific needs of this application
 - Environment variables are temporarily modified during tests
 """
+import sys
+import asyncio
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 import pytest
 import os
@@ -28,6 +33,17 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.core.auth import create_access_token
+
+import asyncio
+import pytest
+
+@pytest.fixture
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    asyncio.set_event_loop(None)
+    loop.close()
+
 
 
 @pytest.fixture
