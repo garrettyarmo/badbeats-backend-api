@@ -1,98 +1,76 @@
 # BadBeats Backend API
 
-A sophisticated backend API that generates AI-driven sports betting picks for the NBA. The system ingests structured data (NBA stats, odds) and unstructured data (news, injury reports) to inform a LangChain-powered LLM, which generates predictions against the spread (ATS).
+**Version:** 0.1.0  
+**Status:** Development
 
-## Features
+## Overview
 
-### Data Ingestion
-- Integration with NBA API for game schedules, team stats, and player stats
-- Live odds data integration via The Odds API
-- Unstructured data ingestion from news sources (ESPN, NBA.com)
+BadBeats is an AI-driven sports betting backend API that generates Against The Spread (ATS) predictions for NBA games. The system ingests structured data (NBA stats, odds) and unstructured data (news, injury reports) to inform a LangChain-powered LLM that generates predictions. The architecture is modular and designed for scalability, allowing integration of additional prediction models and data sources in the future.
 
-### Prediction Models
-- LangChain-powered LLM for ATS predictions
-- Modular framework for independent models
-- Confidence scoring for each prediction
+## Key Features
 
-### API Endpoints
-- Secure, versioned API for betting picks
-- Structured JSON responses with detailed prediction information
-- Authentication and rate limiting
+- **Data Ingestion**: Ingests NBA game schedules, team/player stats, odds, and news data.
+- **Prediction Generation**: Uses a LangChain-powered LLM to generate ATS predictions along with confidence scores and detailed logic.
+- **API Endpoints**: Provides secure, versioned RESTful endpoints for predictions.
+- **Authentication & Security**: Utilizes OAuth2 and JWT for securing API access.
+- **Storage & Retrieval**: Stores predictions in a PostgreSQL (Supabase) database with historical analysis capabilities.
+- **Task Scheduling**: Employs Celery and Redis to schedule predictions (one hour before each game) and handle background tasks.
+- **Logging & Monitoring**: Centralized logging and middleware for monitoring API usage and errors.
 
-### Storage & Retrieval
-- PostgreSQL database for predictions storage
-- Scheduled prediction process (one hour before each game)
-- Historical data analysis
+## Repository Structure
 
-## Tech Stack
+The repository is organized as follows:
 
-- **Backend**: FastAPI, PostgreSQL, SQLAlchemy
-- **Auth**: OAuth2, JWT (via FastAPI security)
-- **LLM/AI**: LangChain, OpenAI/Groq API
-- **Task Queues**: Celery/Redis
-- **Testing**: Pytest
+    /backend
+    ├── app/
+    │   ├── api/        # API endpoints and routes (health, predictions, auth)
+    │   ├── core/       # Core configurations, authentication, logging, middleware
+    │   ├── db/         # Database models, session management, and migrations
+    │   ├── llm/        # LangChain and prediction model implementations
+    │   ├── schemas/    # Pydantic models for request and response validation
+    │   ├── services/   # Business logic and external API integrations
+    │   ├── storage/    # File storage integration (Supabase)
+    │   ├── tests/      # Unit, integration, and end-to-end tests
+    │   └── workers/    # Celery tasks and worker configuration
+    ├── .env            # Environment variables and secrets
+    ├── requirements.txt # Python dependencies
+    ├── Dockerfile      # Containerization configuration
+    └── main.py         # Application entry point
 
-## Project Structure
 
-/backend
-├── app/
-│   ├── api/        # API endpoints
-│   ├── db/         # Database models, schemas, and queries
-│   ├── services/   # Business logic and integrations
-│   ├── workers/    # Background tasks and Celery workers
-│   ├── core/       # Configs, authentication, utilities
-│   ├── schemas/    # Pydantic schemas for validation
-│   ├── llm/        # GenAI and LangChain components
-│   ├── storage/    # File handling logic
-│   ├── tests/      # Unit and integration tests
-├── .env           # Environment variables
-├── requirements.txt # Dependencies
-├── Dockerfile     # Containerization config
-├── README.md      # Documentation
+For a detailed architecture overview and data flow diagram, please refer to [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Setup and Installation
+## Getting Started
 
-1. Clone the repository:
+1. **Environment Setup**:  
+   - Ensure Python (3.8+) is installed.  
+   - Set up a PostgreSQL database and update the `DATABASE_URL` and other required environment variables in `.env`.  
+   - Install dependencies with `pip install -r requirements.txt`.
 
-- git clone https://github.com/garrettyarmo/badbeats-backend-api.git
-- cd badbeats-backend-api
+2. **Running the Application**:  
+   - Start the FastAPI application using `uvicorn main:app --reload`.
+   - Use tools like Postman or your browser to access the API endpoints.
 
-2. Create and activate a virtual environment:
+3. **Task Scheduling**:  
+   - Start Celery workers using `celery -A celery_worker worker --loglevel=info`.
+   - For periodic tasks, start the Celery beat scheduler as well.
 
-- python -m venv venv
-- source venv/bin/activate  # On Windows: venv\Scripts\activate
+4. **Testing**:  
+   - Run unit and integration tests using `pytest`.
+   - End-to-end tests are provided using Playwright; see `app/tests/e2e/test_api_flows.py` for details.
 
-3. Install dependencies:
+## Architecture and Code Flow
 
-- pip install -r requirements.txt
+The project’s architecture is designed as a Directed Acyclic Graph (DAG) where data flows from external sources through ingestion services, is processed by prediction models, and then exposed via secure API endpoints. Each module has a clear responsibility and interacts through well-defined interfaces.
 
-4. Set up environment variables:
+For a detailed breakdown, please see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-- cp .env.example .env
-- Edit .env with your configuration
+## Contributing
 
-5. Run the application:
-
-- python main.py
-
-## API Documentation
-
-Once the server is running, access the interactive API documentation at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## Development
-
-### Testing
-
-- Run tests with pytest: `pytest app/tests`
-
-### Code Style
-
-- This project follows PEP 8 style guidelines. Use tools like flake8 and black for linting and formatting:
-- `flake8 app`
-- `black app`
+- Follow the project coding standards as detailed in the repository documentation.
+- Ensure all new code is accompanied by relevant tests.
+- Document any changes in both code and architecture diagrams.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
