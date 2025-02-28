@@ -421,68 +421,56 @@ async def get_player_stats(
 
 async def get_team_stats_averages(team_id: int, season: Optional[int] = None) -> Any:
     """
-    Fetch team statistics averages for a specific team and season.
-    
-    Note: The season_averages endpoint returns a different structure than
-    other endpoints, so we're returning the raw response.
-
-    Args:
-        team_id: The team ID to get stats for
-        season: Season to get stats for; if not provided, uses the current/most recent season
-
-    Returns:
-        Any: Response object containing team statistics averages.
-        
-    Raises:
-        BallDontLieAPIError: If the API request fails or returns an error.
+    Fetch team statistics averages by first retrieving all players for the team
+    and then calling the season averages endpoint for each player separately.
+    This endpoint requires both a season and a player_id.
+    If season is not provided, defaults to the current season (logic may need adjustment).
     """
     try:
         logger.info(f"Fetching team stats averages for team ID {team_id}, season {season}")
-        
-        # Prepare minimal parameters (since the API doesn't accept team_ids directly)
-        params = {}
-        if season:
-            params["season"] = season
-        
+
+        if not season:
+            season = datetime.now().year if datetime.now().month >= 7 else datetime.now().year - 1
+
+        # Get players for the given team (this uses your get_players service)
+        players = await get_players(team_ids=[team_id])
+        player_ids = [getattr(player, 'id', None) for player in players if getattr(player, 'id', None) is not None]
+
+        if not player_ids:
+            logger.warning(f"No players found for team ID {team_id}")
+            class EmptyResponse:
+                data = []
+            return EmptyResponse()
+
         # Get client from factory
         client = BDLAPIClientFactory.get_client()
-        
-        # Inspect available methods for debugging
-        available_methods = [method for method in dir(client.nba.season_averages) 
-                            if not method.startswith('_')]
-        logger.debug(f"Available methods on season_averages: {available_methods}")
-        
-        # Use an asyncio-friendly approach
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, lambda: client.nba.season_averages.get(**params)
-        )
-        
-        # Filter the results manually to find the team we want
-        # First check if we got a valid response with data
-        if hasattr(response, 'data'):
-            # Create a filtered response with the same structure
-            # but only containing stats for the requested team
-            filtered_data = []
-            
-            # Loop through all season averages
-            for stat in response.data:
-                # Check if this stat is for our team
-                if hasattr(stat, 'team') and hasattr(stat.team, 'id') and stat.team.id == team_id:
-                    filtered_data.append(stat)
-            
-            # Create a wrapper object with the same structure as the original response
-            class FilteredResponse:
-                def __init__(self, data):
-                    self.data = data
-            
-            filtered_response = FilteredResponse(filtered_data)
-            logger.info(f"Found {len(filtered_data)} stat entries for team ID {team_id}")
-            return filtered_response
-        else:
-            logger.warning(f"Response doesn't have expected 'data' attribute")
-            return response
-        
+
+        # Call the season averages endpoint for each player individually
+        tasks = [
+            loop.run_in_executor(
+                None, lambda pid=pid: client.nba.season_averages.get(season=season, player_id=pid)
+            )
+            for pid in player_ids
+        ]
+        responses = await asyncio.gather(*tasks)
+
+        # Combine results from all responses
+        combined_data = []
+        for resp in responses:
+            if hasattr(resp, 'data'):
+                for stat in resp.data:
+                    # Ensure the stat is for the requested team
+                    if hasattr(stat, 'team') and getattr(stat.team, 'id', None) == team_id:
+                        combined_data.append(stat)
+        logger.info(f"Found {len(combined_data)} stat entries for team ID {team_id}")
+
+        class FilteredResponse:
+            def __init__(self, data):
+                self.data = data
+
+        return FilteredResponse(combined_data)
+
     except Exception as e:
         logger.error(f"Failed to fetch team stats averages: {str(e)}")
         raise BallDontLieAPIError(f"Failed to fetch team stats averages: {str(e)}")
@@ -508,15 +496,11 @@ async def get_player_season_averages(player_ids: List[int], season: Optional[int
     try:
         logger.info(f"Fetching season averages for {len(player_ids)} players, season {season}")
         
-        # Prepare parameters
         params = {"player_ids": player_ids}
         if season:
             params["season"] = season
         
-        # Get client from factory
         client = BDLAPIClientFactory.get_client()
-        
-        # Use an asyncio-friendly approach
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None, lambda: client.nba.season_averages.get(**params)
@@ -544,9 +528,7 @@ async def get_current_season_games(team_id: Optional[int] = None) -> List[Any]:
         BallDontLieAPIError: If the API request fails or returns an error.
     """
     try:
-        # Determine current season dates
         current_date = datetime.now()
-        # NBA season typically runs from October to June
         if current_date.month >= 10:
             season_start_year = current_date.year
         else:
@@ -560,25 +542,18 @@ async def get_current_season_games(team_id: Optional[int] = None) -> List[Any]:
         logger.info(f"Fetching current season games for season {season_start_year}-{season_start_year + 1}" +
                    (f" for team ID {team_id}" if team_id else ""))
         
-        # Gather all pages of results manually since pagination is handled differently
         all_games = []
         has_more = True
         per_page = 100
         
         while has_more:
-            # Fetch games for this chunk
             response = await get_games(
                 start_date=season_start,
                 end_date=season_end,
                 team_ids=team_ids,
                 per_page=per_page
             )
-            
-            # Add games to our list
             all_games.extend(response)
-            
-            # Check if we've fetched all games
-            # If we got fewer than requested, we're done
             if len(response) < per_page:
                 has_more = False
         
@@ -607,18 +582,12 @@ async def get_all_data_paginated(fetch_function, **kwargs) -> List[Any]:
     has_more = True
     per_page = kwargs.get('per_page', 100)
     
-    # Remove 'page' if it exists in kwargs
     if 'page' in kwargs:
         del kwargs['page']
     
     while has_more:
-        # Fetch items
         items = await fetch_function(**kwargs)
-        
-        # Add items to our list
         all_items.extend(items)
-        
-        # Check if we've fetched all items (if we got fewer than requested, we're done)
         if len(items) < per_page:
             has_more = False
         
@@ -637,16 +606,10 @@ async def get_team_by_name(team_name: str) -> Optional[Any]:
     """
     try:
         logger.info(f"Searching for team by name: {team_name}")
-        
-        # Get all teams
         teams = await get_all_teams()
-        
-        # Normalize the search name
         search_name = team_name.lower()
         
-        # Search for matching team
         for team in teams:
-            # Check against full_name, name, city, and abbreviation
             full_name = getattr(team, 'full_name', '').lower()
             name = getattr(team, 'name', '').lower()
             city = getattr(team, 'city', '').lower()
@@ -680,12 +643,9 @@ async def get_team_schedule(team_id: int, days_ahead: int = 30) -> List[Any]:
     """
     try:
         logger.info(f"Fetching upcoming schedule for team ID {team_id}")
-        
-        # Get current date
         today = datetime.now()
         end_date = today + timedelta(days=days_ahead)
         
-        # Fetch games for this team - removed [] suffix from parameter name
         games = await get_games(
             start_date=today,
             end_date=end_date,
