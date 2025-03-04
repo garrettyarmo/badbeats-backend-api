@@ -14,7 +14,6 @@ Key components:
 - worker: Entry point for starting Celery workers
 """
 
-from app.workers.celery_app import celery_app
 from app.workers.tasks import (
     ingest_nba_data,
     schedule_game_predictions,
