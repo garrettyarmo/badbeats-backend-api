@@ -5,17 +5,16 @@
 
 ## Overview
 
-BadBeats is an AI-driven sports betting backend API that generates Against The Spread (ATS) predictions for NBA games. The system ingests structured data (NBA stats, odds) and unstructured data (news, injury reports) to inform a LangChain-powered LLM that generates predictions. The architecture is modular and designed for scalability, allowing integration of additional prediction models and data sources in the future.
+BadBeats is an AI-driven sports betting backend API that generates Against The Spread (ATS) predictions for NBA games. The system ingests structured data (NBA stats, odds) from the Ball Don't Lie API and unstructured data (news, injury reports) from sources like ESPN, NBA.com, and Bleacher Report. Predictions are generated using direct OpenAI API calls, processed synchronously, and exposed via secure RESTful endpoints. The architecture is modular, supporting future expansions such as additional prediction models or sports.
 
 ## Key Features
 
-- **Data Ingestion**: Ingests NBA game schedules, team/player stats, odds, and news data.
-- **Prediction Generation**: Uses a LangChain-powered LLM to generate ATS predictions along with confidence scores and detailed logic.
-- **API Endpoints**: Provides secure, versioned RESTful endpoints for predictions.
-- **Authentication & Security**: Utilizes OAuth2 and JWT for securing API access.
-- **Storage & Retrieval**: Stores predictions in a PostgreSQL (Supabase) database with historical analysis capabilities.
-- **Task Scheduling**: Employs Celery and Redis to schedule predictions (one hour before each game) and handle background tasks.
-- **Logging & Monitoring**: Centralized logging and middleware for monitoring API usage and errors.
+- **Data Ingestion**: Fetches NBA game schedules, team/player stats, odds, and news data daily.
+- **Prediction Generation**: Uses OpenAI's LLM to produce ATS predictions with confidence scores and reasoning.
+- **API Endpoints**: Offers secure, versioned RESTful endpoints for accessing predictions.
+- **Authentication & Security**: Implements OAuth2 with JWT for API access control.
+- **Storage & Retrieval**: Stores predictions and historical game data in a PostgreSQL (Supabase) database.
+- **Logging & Monitoring**: Provides centralized logging for debugging and monitoring.
 
 ## Repository Structure
 
@@ -25,52 +24,69 @@ The repository is organized as follows:
     ├── app/
     │   ├── api/        # API endpoints and routes (health, predictions, auth)
     │   ├── core/       # Core configurations, authentication, logging, middleware
-    │   ├── db/         # Database models, session management, and migrations
-    │   ├── llm/        # LangChain and prediction model implementations
-    │   ├── schemas/    # Pydantic models for request and response validation
+    │   ├── db/         # Database client and utilities (Supabase integration)
+    │   ├── llm/        # Prediction model implementations (OpenAI-based)
+    │   ├── schemas/    # Pydantic models for request/response validation
     │   ├── services/   # Business logic and external API integrations
-    │   ├── storage/    # File storage integration (Supabase)
+    │   ├── storage/    # File storage utilities (currently minimal)
     │   ├── tests/      # Unit, integration, and end-to-end tests
-    │   └── workers/    # Celery tasks and worker configuration
-    ├── .env            # Environment variables and secrets
+    │   ├── workers/    # Workflow utilities for data ingestion and predictions
+    ├── .env            # Environment variables (not tracked)
     ├── requirements.txt # Python dependencies
     ├── Dockerfile      # Containerization configuration
     └── main.py         # Application entry point
 
-
-For a detailed architecture overview and data flow diagram, please refer to [ARCHITECTURE.md](ARCHITECTURE.md).
+For a detailed architecture overview and data flow diagram, refer to [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Getting Started
 
 1. **Environment Setup**:  
-   - Ensure Python (3.8+) is installed.  
-   - Set up a PostgreSQL database and update the `DATABASE_URL` and other required environment variables in `.env`.  
-   - Install dependencies with `pip install -r requirements.txt`.
+   - Ensure Python 3.8+ is installed.  
+   - Set up a PostgreSQL database via Supabase and update `DATABASE_URL` in `.env`.  
+   - Install dependencies:
+     ```bash
+     pip install -r requirements.txt
+     ```
 
 2. **Running the Application**:  
-   - Start the FastAPI application using `uvicorn main:app --reload`.
-   - Use tools like Postman or your browser to access the API endpoints.
+   - Start the FastAPI server:
+     ```bash
+     uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+     ```
+   - Access endpoints at `http://localhost:8000` (e.g., `/docs` for API docs).
 
-3. **Task Scheduling**:  
-   - Start Celery workers using `celery -A celery_worker worker --loglevel=info`.
-   - For periodic tasks, start the Celery beat scheduler as well.
+3. **Running the Prediction Workflow**:  
+   - Execute the workflow manually or schedule it (e.g., via cron):
+     ```bash
+     python -m app.services.prediction_workflow
+     ```
+   - Example cron job (daily at 2 AM):
+     ```bash
+     0 2 * * * /path/to/python /path/to/app/services/prediction_workflow.py >> /path/to/logfile.log 2>&1
+     ```
 
 4. **Testing**:  
-   - Run unit and integration tests using `pytest`.
-   - End-to-end tests are provided using Playwright; see `app/tests/e2e/test_api_flows.py` for details.
+   - Run unit and integration tests:
+     ```bash
+     pytest app/tests
+     ```
+   - For end-to-end tests with Playwright:
+     ```bash
+     pip install pytest-playwright
+     playwright install
+     pytest app/tests/e2e
+     ```
 
 ## Architecture and Code Flow
 
-The project’s architecture is designed as a Directed Acyclic Graph (DAG) where data flows from external sources through ingestion services, is processed by prediction models, and then exposed via secure API endpoints. Each module has a clear responsibility and interacts through well-defined interfaces.
-
-For a detailed breakdown, please see [ARCHITECTURE.md](ARCHITECTURE.md).
+The architecture follows a Directed Acyclic Graph (DAG) pattern where data flows from external sources through ingestion services to storage, then to the prediction engine, and finally to API endpoints. Key modules have distinct responsibilities with well-defined interfaces. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
 
 ## Contributing
 
-- Follow the project coding standards as detailed in the repository documentation.
-- Ensure all new code is accompanied by relevant tests.
-- Document any changes in both code and architecture diagrams.
+- Adhere to coding standards in the project documentation.
+- Accompany new code with tests in `app/tests`.
+- Update documentation for significant changes.
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
