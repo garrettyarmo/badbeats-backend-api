@@ -1,74 +1,47 @@
-"""/**
+"""
+/**
  * @file: prediction_workflow.py
  * @description 
- * This module orchestrates the simplified predictions workflow for the BadBeats backend.
- * It replaces the Celery-based task system with a single entry point for data ingestion
- * and prediction generation, callable via a script or FastAPI endpoint.
+ * This module provides entry points for running data ingestion and prediction generation workflows
+ * in the BadBeats backend. It orchestrates these processes separately, allowing data ingestion to
+ * update the database daily and prediction generation to run periodically (e.g., hourly) closer to
+ * game times.
  * 
  * Key features:
- * - Workflow Orchestration: Manages daily data updates and prediction generation.
- * - Simplified Execution: Runs synchronously, suitable for cron or manual triggering.
+ * - Data Ingestion Workflow: Triggers daily data updates from the Ball Don't Lie API.
+ * - Prediction Generation Workflow: Triggers prediction generation for upcoming games.
  * 
  * @dependencies
- * - app.workers.tasks: For data ingestion and prediction logic.
+ * - app.workers.tasks: For ingestion and prediction logic.
  * - app.core.logger: For logging.
  * 
  * @notes
- * - Designed to run once daily; adjust frequency as needed.
- * - Errors are logged but do not halt execution to ensure partial success.
- * - Assumes Supabase tables are set up via prediction_service.py.
- */"""
-
-from datetime import datetime
-from typing import Any, Dict
-from app.workers.tasks import ingest_nba_data, schedule_and_generate_predictions
+ * - Designed for external scheduling (e.g., cron) with separate triggers.
+ * - Synchronous execution simplifies deployment without Celery.
+ */
+"""
+from app.workers.tasks import ingest_nba_data, generate_predictions
 from app.core.logger import setup_logger
 
-# Initialize logger
 logger = setup_logger("app.services.prediction_workflow")
 
-def run_prediction_workflow() -> Dict[str, Any]:
+def run_data_ingestion():
     """
-    Execute the complete prediction workflow.
+    Run the data ingestion workflow to update NBA data in Supabase.
 
-    This function:
-    1. Ingests latest NBA data into Supabase.
-    2. Generates predictions for upcoming games within 24 hours.
-
-    Returns:
-        Dict[str, Any]: Summary of the workflow execution.
+    Intended to be scheduled daily to keep the database current.
     """
-    logger.info("Starting prediction workflow")
-    result = {
-        "status": "success",
-        "data_ingestion": {},
-        "predictions": {},
-        "timestamp": datetime.now().isoformat()
-    }
+    logger.info("Running data ingestion workflow")
+    result = ingest_nba_data()
+    logger.info(f"Data ingestion completed with status: {result['status']}")
 
-    # Step 1: Ingest data
-    try:
-        ingestion_result = ingest_nba_data()
-        result["data_ingestion"] = ingestion_result
-        if ingestion_result["status"] != "success":
-            logger.warning("Data ingestion encountered issues")
-            result["status"] = "partial_success"
-    except Exception as e:
-        logger.error(f"Data ingestion failed: {str(e)}")
-        result["data_ingestion"] = {"status": "error", "message": str(e)}
-        result["status"] = "partial_success"
+def run_prediction_generation():
+    """
+    Run the prediction generation workflow for upcoming games.
 
-    # Step 2: Generate predictions
-    try:
-        prediction_result = schedule_and_generate_predictions()
-        result["predictions"] = prediction_result
-        if prediction_result["status"] != "success":
-            logger.warning("Prediction generation encountered issues")
-            result["status"] = "partial_success"
-    except Exception as e:
-        logger.error(f"Prediction generation failed: {str(e)}")
-        result["predictions"] = {"status": "error", "message": str(e)}
-        result["status"] = "partial_success"
-
-    logger.info(f"Completed prediction workflow with status: {result['status']}")
-    return result
+    Intended to be scheduled periodically (e.g., hourly) to generate predictions
+    for games within the next hour.
+    """
+    logger.info("Running prediction generation workflow")
+    result = generate_predictions()
+    logger.info(f"Prediction generation completed with status: {result['status']}")

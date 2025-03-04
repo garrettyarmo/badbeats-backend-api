@@ -15,7 +15,7 @@ This guide walks you through setting up and running the BadBeats Backend API, in
   ```
 
 - **PostgreSQL**  
-  Uses Supabase-managed PostgreSQL by default. For local use, ensure a connection string (`DATABASE_URL`) is available.
+  Uses Supabase-managed PostgreSQL by default. For local use, ensure a connection string (DATABASE_URL) is available.
 
 - **Git**  
   Required to clone the repository and manage code changes.
@@ -64,6 +64,7 @@ source venv/bin/activate
 ```
 
 On Windows:
+
 ```cmd
 python -m venv venv
 venv\Scripts\activate
@@ -80,6 +81,7 @@ Installs FastAPI, Supabase, OpenAI, and other required packages.
 ### Configure Environment Variables
 
 Copy `.env.example` to `.env` and fill in values. For local Postgres:
+
 ```bash
 DATABASE_URL=postgresql://postgres:postgrespassword@127.0.0.1:5432/badbeats_db
 ```
@@ -87,13 +89,15 @@ DATABASE_URL=postgresql://postgres:postgrespassword@127.0.0.1:5432/badbeats_db
 ### Database Initialization
 
 For local Postgres:
+
 ```bash
 createdb badbeats_db
 ```
 
 For Supabase, use the dashboard or CLI (`supabase db push`) to create tables:
-- `predictions`: `id (uuid)`, `agent_id`, `game_id`, `pick`, `logic`, `confidence`, `result`, `created_at`, `updated_at`
-- `games`: `id`, `game_data (jsonb)`, `created_at`, `updated_at`
+
+- **predictions**: id (uuid), agent_id, game_id, pick, logic, confidence, result, created_at, updated_at
+- **games**: id, game_data (jsonb), created_at, updated_at
 
 Set `DATABASE_URL` to point to your database.
 
@@ -103,21 +107,39 @@ Set `DATABASE_URL` to point to your database.
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Access at `http://localhost:8000`:
-- Root: `http://localhost:8000/`
-- API Docs: `http://localhost:8000/docs`
+Access at http://localhost:8000:
 
-### Running the Prediction Workflow
+- Root: http://localhost:8000/
+- API Docs: http://localhost:8000/docs
 
-Run manually or schedule it:
+### Running the Workflows
+
+#### Data Ingestion: 
+Run daily to update structured data:
+
 ```bash
-python -m app.services.prediction_workflow
+python -m app.services.prediction_workflow run_data_ingestion
 ```
 
-For daily execution (e.g., 2 AM):
+Schedule with cron (e.g., 2 AM daily):
+
 ```bash
 crontab -e
-0 2 * * * /path/to/python /path/to/app/services/prediction_workflow.py >> /path/to/logfile.log 2>&1
+0 2 * * * /path/to/python /path/to/app/services/prediction_workflow.py run_data_ingestion >> /path/to/logfile.log 2>&1
+```
+
+#### Prediction Generation: 
+Run hourly to generate predictions for upcoming games:
+
+```bash
+python -m app.services.prediction_workflow run_prediction_generation
+```
+
+Schedule with cron (e.g., every hour):
+
+```bash
+crontab -e
+0 * * * * /path/to/python /path/to/app/services/prediction_workflow.py run_prediction_generation >> /path/to/logfile.log 2>&1
 ```
 
 ## 4. Verifying Installation
@@ -129,6 +151,7 @@ curl http://localhost:8000/api/v1/health
 ```
 
 Expected response:
+
 ```json
 {"status": "OK", "message": "Health check successful"}
 ```
@@ -136,11 +159,13 @@ Expected response:
 ### Predictions Endpoint
 
 Requires JWT:
+
 ```bash
 curl -X GET "http://localhost:8000/api/v1/predictions" -H "Authorization: Bearer <your_token>"
 ```
 
 Returns:
+
 ```json
 {"picks": [...]}
 ```
@@ -164,13 +189,14 @@ pytest -xvs app/tests
 ### End-to-End Tests
 
 Requires Playwright:
+
 ```bash
 pip install pytest-playwright
 playwright install
 pytest -xvs app/tests/e2e
 ```
 
-Ensure the server is running at `http://localhost:8000`.
+Ensure the server is running at http://localhost:8000.
 
 ### Coverage
 
@@ -182,18 +208,24 @@ coverage run -m pytest && coverage report -m
 
 ### 6.1. Create a New Render Web Service
 
-1. Link your GitHub repository to Render.
-2. Set environment variables in Render’s dashboard matching `.env`.
-3. Start command:
-   ```bash
-   uvicorn app.main:app --host 0.0.0.0 --port 10000
-   ```
-4. Render installs dependencies from `requirements.txt` and deploys.
+- Link your GitHub repository to Render.
+- Set environment variables in Render's dashboard matching `.env`.
+- Start command:
 
-### 6.2. Running the Prediction Workflow on Render
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 10000
+```
 
-- Add an endpoint (e.g., `/api/v1/run-workflow`) to trigger `run_prediction_workflow()` and call it via a scheduled task (e.g., Render cron job or external scheduler).
-- Alternatively, run the workflow script manually on a separate instance.
+Render installs dependencies from `requirements.txt` and deploys.
+
+### 6.2. Running the Workflows on Render
+
+- **Data Ingestion**: Use Render's cron job feature to run daily:
+  - Command: `python -m app.services.prediction_workflow run_data_ingestion`
+  - Schedule: `0 2 * * *` (2 AM UTC)
+- **Prediction Generation**: Use Render's cron job feature to run hourly:
+  - Command: `python -m app.services.prediction_workflow run_prediction_generation`
+  - Schedule: `0 * * * *` (every hour)
 
 ### 6.3. Database on Render
 
@@ -202,7 +234,7 @@ Use Supabase with `DATABASE_URL` set in the environment. Manage tables via Supab
 ### 6.4. Post-Deployment Checks
 
 - Verify logs in Render.
-- Test: `https://yourapp.onrender.com/api/v1/health`
+- Test: https://yourapp.onrender.com/api/v1/health
 - Test predictions with a JWT-authenticated request.
 
 ## 7. Further Notes & Best Practices
@@ -229,11 +261,9 @@ Use Supabase with `DATABASE_URL` set in the environment. Manage tables via Supab
 
 ## 8. Summary
 
-1. Configure environment variables.
-2. Install dependencies and set up the database.
-3. Run FastAPI locally or on Render.
-4. Trigger the prediction workflow manually or via schedule.
-5. Test with unit and e2e tests.
-6. Deploy to Render with environment setup.
-
-Your AI-driven betting picks service is now operational!
+- Configure environment variables.
+- Install dependencies and set up the database.
+- Run FastAPI locally or on Render.
+- Schedule data ingestion daily and prediction generation hourly.
+- Test with unit and e2e tests.
+- Deploy to Render with environment setup.
